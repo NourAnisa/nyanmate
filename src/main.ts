@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import App from './App.vue'
 import PresenterView from './components/PresenterView.vue'
 import ClassReportDashboard from './components/ClassReportDashboard.vue'
+import SmartAgendaDashboard from './components/SmartAgendaDashboard.vue'
 import './style.css'
 import './presentation.css'
 import './v05.css'
@@ -22,7 +23,8 @@ import './v18.css'
 import './v19.css'
 import './v20.css'
 import './v21.css'
+import './v22.css'
 
 const label = getCurrentWindow().label
-const Root = label === 'presenter' ? PresenterView : label === 'reports' ? ClassReportDashboard : App
+const Root = label === 'presenter' ? PresenterView : label === 'reports' ? ClassReportDashboard : label === 'agenda' ? SmartAgendaDashboard : App
 createApp(Root).mount('#app')

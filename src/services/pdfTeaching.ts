@@ -9,10 +9,7 @@ export type TeachingCueType = 'title' | 'bullets' | 'chart' | 'image' | 'formula
 export type TeachingGesture = 'greet' | 'point-left' | 'point-right' | 'think' | 'code' | 'explain' | 'summarize'
 export type SafeSide = 'left' | 'right'
 
-export interface PointTarget {
-  x: number
-  y: number
-}
+export interface PointTarget { x: number; y: number }
 
 export interface TeachingCue {
   page: number
@@ -33,9 +30,12 @@ export interface PreparedPdf {
   bytes: Uint8Array
 }
 
-interface LayoutHint {
-  safeSide: SafeSide
-  pointTarget: PointTarget
+interface LayoutHint { safeSide: SafeSide; pointTarget: PointTarget }
+
+type TextItemLike = {
+  str?: string
+  width?: number
+  transform?: number[]
 }
 
 function createPresenterNote(type: TeachingCueType, preview: string) {
@@ -83,7 +83,7 @@ function classifyPage(text: string, page: number, pageCount: number, layout: Lay
   }
 }
 
-function analyzeLayout(items: Awaited<ReturnType<Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>['getPage']>> extends never ? never : any[], width: number, height: number): LayoutHint {
+function analyzeLayout(items: TextItemLike[], width: number, height: number): LayoutHint {
   let leftWeight = 0
   let rightWeight = 0
   let bestScore = -1
@@ -91,11 +91,12 @@ function analyzeLayout(items: Awaited<ReturnType<Awaited<ReturnType<typeof pdfjs
   let targetY = height / 2
 
   for (const item of items) {
-    if (!('str' in item) || !item.str.trim() || !('transform' in item)) continue
-    const x = Number(item.transform?.[4] ?? width / 2)
-    const y = Number(item.transform?.[5] ?? height / 2)
+    const text = item.str?.trim() ?? ''
+    if (!text || !item.transform) continue
+    const x = Number(item.transform[4] ?? width / 2)
+    const y = Number(item.transform[5] ?? height / 2)
     const itemWidth = Number(item.width ?? 0)
-    const score = Math.max(1, item.str.trim().length) * Math.max(1, itemWidth)
+    const score = Math.max(1, text.length) * Math.max(1, itemWidth)
     if (x < width / 2) leftWeight += score
     else rightWeight += score
     if (score > bestScore) {
@@ -124,8 +125,9 @@ export async function preparePdf(file: File): Promise<PreparedPdf> {
     const page = await pdf.getPage(pageNumber)
     const viewport = page.getViewport({ scale: 1 })
     const content = await page.getTextContent()
-    const text = content.items.map((item) => ('str' in item ? item.str : '')).join(' ')
-    const layout = analyzeLayout(content.items as any[], viewport.width, viewport.height)
+    const items = content.items as TextItemLike[]
+    const text = items.map((item) => item.str ?? '').join(' ')
+    const layout = analyzeLayout(items, viewport.width, viewport.height)
     cues.push(classifyPage(text, pageNumber, pdf.numPages, layout))
   }
 

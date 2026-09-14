@@ -11,7 +11,7 @@ The goal is to combine a living desktop pet with productivity tools, teaching/pr
 - Eye/cursor reaction and animated pet states
 - Agenda + reminders stored locally
 - Pomodoro timer
-- Teaching mode for presentations/PDF sessions
+- Built-in PDF Teaching Mode
 - Speech bubbles and status reactions
 - Extensible AI-agent state model (OpenCode, Codex, Claude Code, Cursor, Kiro, etc.)
 - Local-first architecture; heavier AI features are intended to be opt-in and loaded on demand
@@ -20,13 +20,25 @@ The goal is to combine a living desktop pet with productivity tools, teaching/pr
 
 The official default NyanMate mascot is an original **gray-and-white chibi kitten with a burgundy scarf and gold star badge**. Activity-specific accessories appear only when needed: blue headphones + laptop for coding, and glasses + graduation cap + pointer for teaching. See `docs/MASCOT.md` for the design guide.
 
-## Prepared PDF Teaching Mode
+## PDF Teaching Mode
 
-Starting in **v0.3**, a PDF can be dropped into NyanMate before class. The PDF is parsed locally with PDF.js. NyanMate reads the page count and text layer, then creates a lightweight teaching cue for every page. Current cue categories include opening/title, key points, chart/visual, formula/metric, code, question/discussion, summary, and general explanation.
+### v0.3 — preparation
+A PDF can be dropped into NyanMate before class. PDF.js parses it locally, reads the page count and text layer, and creates lightweight teaching cues such as opening/title, key points, chart/visual, formula/metric, code, question/discussion, summary, and general explanation.
 
-During Teaching Mode, the arrow keys or Page Up/Page Down move through the prepared page sequence and NyanMate changes its speech bubble to the cue for that PDF page. `Q` triggers a question prompt and `D` triggers a discussion prompt.
+### v0.4 — built-in presentation
+NyanMate now renders the prepared PDF inside its own presentation surface. Starting Teaching Mode with a prepared PDF switches the desktop window to fullscreen, displays the real PDF page, and keeps the displayed page synchronized with NyanMate's cue and animation.
 
-This is intentionally a **prepared-controller mode**, not yet automatic tracking of arbitrary third-party PDF viewers. A later milestone will add a dedicated presentation surface and optional external-viewer detection.
+Controls:
+
+- `→`, `PageDown`, or `Space`: next page
+- `←` or `PageUp`: previous page
+- `Q`: question prompt
+- `D`: discussion prompt
+- `Esc`: end presentation
+
+NyanMate moves between the left and right side of the presentation based on the page gesture so it is less likely to cover the material. Rendering and cue preparation remain local-first.
+
+External Adobe Reader/browser page tracking is not implemented yet; the reliable path is the built-in NyanMate presentation surface.
 
 ## Planned modules
 
@@ -58,7 +70,9 @@ npm run dev
 
 ## Current status
 
-**v0.3.x prototype** includes the official mascot direction, cursor-following eyes, pet/drag interaction, agenda reminders, Pomodoro, system-tray support, activity states, and local PDF preparation with page-aware teaching cues. The next teaching milestone is a dedicated PDF presentation surface with automatic synchronization between the displayed page and NyanMate choreography.
+**v0.4.x prototype** includes the official mascot direction, cursor-following eyes, pet/drag interaction, agenda reminders, Pomodoro, system-tray support, activity states, local PDF preparation, fullscreen PDF rendering, synchronized page navigation, and page-aware NyanMate choreography.
+
+Next teaching milestones include smarter content-region detection, presenter notes on a second display, pointer targeting within the slide, and optional support for external presentation applications.
 
 ## Design principles
 

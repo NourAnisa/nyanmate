@@ -2,7 +2,7 @@
 
 NyanMate is a lightweight, local-first AI desktop companion built with **Tauri 2 + Vue 3 + TypeScript + Rust**. It combines an original desktop pet with productivity tools, PDF teaching support, local analytics, reminders, and an extensible AI coding-companion architecture.
 
-## Current prototype — v0.20.x
+## Current prototype — v0.21.x
 
 NyanMate currently includes:
 
@@ -10,6 +10,8 @@ NyanMate currently includes:
 - autonomous idle behavior with looking around, grooming, stretching, resting, and dozing;
 - local mood model with calm, curious, playful, and sleepy states;
 - lightweight micro-roaming inside the companion window;
+- persistent pet personality and customization settings;
+- configurable pet name, accessory, motion level, sleep timeout, and autonomous movement;
 - local agenda reminders and Pomodoro;
 - built-in PDF Teaching Mode with fullscreen presentation;
 - semantic PDF focus targeting and teaching choreography;
@@ -34,11 +36,21 @@ NyanMate accepts a normalized coding-agent state contract: `idle`, `starting`, `
 The mascot gained lightweight autonomous idle activities such as looking around, grooming, stretching, resting, and dozing. The behavior remains local and event-driven.
 
 ### v0.20 — Mood + Micro-Roaming
-NyanMate now has a deterministic local mood layer with **calm, curious, playful, and sleepy** states. Mood is derived from recent local interaction and inactivity rather than camera, microphone, or screen surveillance.
+NyanMate gained a deterministic local mood layer with **calm, curious, playful, and sleepy** states. Mood is derived from recent local interaction and inactivity rather than camera, microphone, or screen surveillance. A bounded roaming pattern makes the mascot feel more alive without constantly moving the operating-system window.
 
-Repeated petting can make NyanMate more playful, inactivity lowers energy, and extended inactivity makes the mascot sleepy. A small bounded roaming pattern lets the mascot shift position naturally inside its desktop companion area without constantly moving the operating-system window.
+### v0.21 — Personality + Customization
+The desktop pet now has persistent local customization. Right-click the mascot to open **Pet Customization** and choose:
 
-The mascot tooltip exposes lightweight Energy and Affection values for debugging/feedback. Autonomous movement stops while NyanMate is in active coding, teaching, success, error, or other externally controlled states. Animations also respect `prefers-reduced-motion`.
+- a pet name;
+- personality: **Gentle, Playful, Focused, or Sleepy**;
+- accessory: signature scarf, bell, bow, or none;
+- low, normal, or high motion intensity;
+- sleep timeout from 1–30 minutes;
+- autonomous movement on/off.
+
+Personality changes behavior rather than only labels. Playful pets roam more and remain awake longer, Focused pets move less, Sleepy pets settle down sooner, and Gentle keeps the balanced default behavior. Settings are stored locally on the device and do not require an account or cloud service.
+
+The mascot tooltip still exposes lightweight Energy and Affection values for debugging/feedback. Active coding, teaching, success, error, and other externally controlled states take priority over autonomous behavior. Animations respect `prefers-reduced-motion`.
 
 ## Teaching Companion milestones
 
@@ -75,7 +87,7 @@ Edited Lesson Flows can be saved as reusable personal templates. The Pre-Class R
 
 ## Planned modules
 
-1. **Living Desktop Pet** — richer movement, reactions, customization, accessories, and pet personality.
+1. **Living Desktop Pet** — continue with richer reactions, optional accessory packs, and polished movement.
 2. **Smart Agenda** — recurring reminders, daily brief, and calendar integrations.
 3. **Teaching Companion** — maintain and polish existing local teaching workflow.
 4. **AI Coding Companion** — connect normalized states to real local CLI adapters.

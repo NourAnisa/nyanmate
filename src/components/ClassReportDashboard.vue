@@ -1,0 +1,107 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import {
+  loadReportHistory,
+  reportsToCsv,
+  summarizeReports,
+  type ClassSessionReport,
+} from '../services/assessment'
+
+const props = defineProps<{ pdfName: string | null }>()
+
+const reports = ref<ClassSessionReport[]>([])
+const selectedIndex = ref(0)
+
+const summary = computed(() => summarizeReports(reports.value))
+const selectedReport = computed(() => reports.value[selectedIndex.value] ?? null)
+const durationText = (seconds: number) => `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+
+function load() {
+  reports.value = props.pdfName ? loadReportHistory(props.pdfName) : []
+  selectedIndex.value = 0
+}
+
+function downloadCsv() {
+  if (!reports.value.length || !props.pdfName) return
+  const blob = new Blob([reportsToCsv(reports.value)], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${props.pdfName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-class-report.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function printReport() {
+  window.print()
+}
+
+watch(() => props.pdfName, load, { immediate: true })
+</script>
+
+<template>
+  <section class="report-dashboard">
+    <div class="report-dashboard-head">
+      <div>
+        <small>📊 Class Report Dashboard</small>
+        <h3>{{ pdfName || 'No PDF selected' }}</h3>
+      </div>
+      <div class="report-actions">
+        <button :disabled="!reports.length" @click="downloadCsv">CSV</button>
+        <button :disabled="!reports.length" @click="printReport">Print / Save PDF</button>
+      </div>
+    </div>
+
+    <p v-if="!reports.length" class="report-empty">Belum ada laporan kelas tersimpan untuk materi ini.</p>
+
+    <template v-else>
+      <div class="report-summary-grid">
+        <article><small>Sesi</small><strong>{{ summary.sessionCount }}</strong></article>
+        <article><small>Total mengajar</small><strong>{{ durationText(summary.totalTeachingSec) }}</strong></article>
+        <article><small>Rata-rata</small><strong>{{ durationText(summary.averageTeachingSec) }}</strong></article>
+        <article><small>Halaman unik</small><strong>{{ summary.uniquePagesVisited }}</strong></article>
+        <article><small>Assessment</small><strong>{{ summary.totalAssessments }}</strong></article>
+        <article><small>Akurasi</small><strong>{{ summary.accuracyPercent == null ? '—' : `${summary.accuracyPercent}%` }}</strong></article>
+      </div>
+
+      <div class="report-session-picker">
+        <label>Sesi
+          <select v-model.number="selectedIndex">
+            <option v-for="(report, index) in reports" :key="report.startedAt + index" :value="index">
+              {{ new Date(report.startedAt).toLocaleString() }} · {{ durationText(report.durationSec) }}
+            </option>
+          </select>
+        </label>
+      </div>
+
+      <article v-if="selectedReport" class="report-detail printable-report">
+        <header>
+          <div><small>Session report</small><h4>{{ selectedReport.pdfName }}</h4></div>
+          <strong>{{ durationText(selectedReport.durationSec) }}</strong>
+        </header>
+        <div class="report-meta">
+          <span><small>Started</small>{{ new Date(selectedReport.startedAt).toLocaleString() }}</span>
+          <span><small>Finished</small>{{ new Date(selectedReport.finishedAt).toLocaleString() }}</span>
+          <span><small>Pages visited</small>{{ selectedReport.pagesVisited.join(', ') || '—' }}</span>
+        </div>
+
+        <div class="report-page-coverage" v-if="selectedReport.pagesVisited.length">
+          <span v-for="page in selectedReport.pagesVisited" :key="page">{{ page }}</span>
+        </div>
+
+        <div class="report-assessment-list">
+          <h4>Assessment recap</h4>
+          <p v-if="!selectedReport.assessments.length">Tidak ada assessment pada sesi ini.</p>
+          <div v-for="(item, index) in selectedReport.assessments" :key="`${item.page}-${index}`" class="report-assessment-row">
+            <div><strong>Page {{ item.page }} · {{ item.kind }}</strong><small>{{ item.answeredAt ? new Date(item.answeredAt).toLocaleTimeString() : 'No answer recorded' }}</small></div>
+            <span v-if="item.correct === true" class="correct">✓ Correct</span>
+            <span v-else-if="item.correct === false" class="wrong">✕ Incorrect</span>
+            <span v-else>—</span>
+            <code>{{ item.selectedOptionId?.toUpperCase() || '—' }}</code>
+            <small>{{ item.revealed ? 'Answer revealed' : 'Not revealed' }}</small>
+          </div>
+        </div>
+      </article>
+    </template>
+  </section>
+</template>

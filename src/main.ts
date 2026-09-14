@@ -21,6 +21,7 @@ import './v17.css'
 import './v18.css'
 import './v19.css'
 import './v20.css'
+import './v21.css'
 
 const label = getCurrentWindow().label
 const Root = label === 'presenter' ? PresenterView : label === 'reports' ? ClassReportDashboard : App

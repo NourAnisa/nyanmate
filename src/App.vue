@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import NyanPet from './components/NyanPet.vue'
 import PdfTeachingPanel from './components/PdfTeachingPanel.vue'
+import PdfPresentationStage from './components/PdfPresentationStage.vue'
 import type { PreparedPdf, TeachingCue } from './services/pdfTeaching'
 import type { AgendaItem, PetState } from './types'
 
@@ -17,13 +19,21 @@ const teachingPage = ref(1)
 const teachingPages = ref(20)
 const teachingTopic = ref('PDF Presentation')
 const preparedPdf = ref<PreparedPdf | null>(null)
+const presentationOpen = ref(false)
 let timer: number | undefined
 let bubbleReset: number | undefined
 
 const focusText = computed(() => `${String(Math.floor(focusSeconds.value / 60)).padStart(2, '0')}:${String(focusSeconds.value % 60).padStart(2, '0')}`)
 const teachingActive = computed(() => petState.value === 'teaching')
+const builtInPresentation = computed(() => teachingActive.value && presentationOpen.value && preparedPdf.value !== null)
 const nextAgenda = computed(() => agenda.value.find(item => new Date(item.startsAt).getTime() >= Date.now()))
 const currentTeachingCue = computed(() => preparedPdf.value?.cues[teachingPage.value - 1] ?? null)
+const petSide = computed(() => {
+  const gesture = currentTeachingCue.value?.gesture
+  if (gesture === 'point-left') return 'pet-right'
+  if (gesture === 'point-right') return 'pet-left'
+  return teachingPage.value % 2 === 0 ? 'pet-right' : 'pet-left'
+})
 
 function speak(message: string, state: PetState = 'idle', autoReset = false) {
   bubble.value = message
@@ -66,7 +76,7 @@ function handlePdfPrepared(pdf: PreparedPdf) {
   teachingTopic.value = pdf.name
   teachingPages.value = pdf.pageCount
   teachingPage.value = 1
-  bubble.value = `PDF ready: ${pdf.name} · ${pdf.pageCount} pages. Teaching cues prepared locally. 📄✨`
+  bubble.value = `PDF ready: ${pdf.name} · ${pdf.pageCount} pages. Ready for built-in presentation. 📄✨`
 }
 
 function handlePreparedCue(cue: TeachingCue) {
@@ -74,12 +84,24 @@ function handlePreparedCue(cue: TeachingCue) {
   bubble.value = `Page ${cue.page}: ${cue.message}`
 }
 
-function teachingMode() {
+async function setFullscreen(value: boolean) {
+  try {
+    await getCurrentWindow().setFullscreen(value)
+  } catch {
+    // Browser preview does not expose the Tauri desktop window API.
+  }
+}
+
+async function teachingMode() {
   if (teachingActive.value) {
+    presentationOpen.value = false
+    await setFullscreen(false)
     speak('Class finished. Nice teaching! 🎓', 'success', true)
   } else {
     teachingPage.value = 1
     petState.value = 'teaching'
+    presentationOpen.value = Boolean(preparedPdf.value)
+    if (presentationOpen.value) await setFullscreen(true)
     const cue = currentTeachingCue.value
     bubble.value = cue
       ? `Page 1/${teachingPages.value}: ${cue.message}`
@@ -90,19 +112,16 @@ function teachingMode() {
 
 function changeTeachingPage(delta: number) {
   teachingPage.value = Math.max(1, Math.min(teachingPages.value, teachingPage.value + delta))
-
-  const preparedCue = currentTeachingCue.value
-  if (preparedCue) {
-    bubble.value = `Page ${teachingPage.value}/${teachingPages.value}: ${preparedCue.message}`
+  const cue = currentTeachingCue.value
+  if (cue) {
+    bubble.value = `Page ${teachingPage.value}/${teachingPages.value}: ${cue.message}`
     return
   }
-
   const progress = teachingPage.value / teachingPages.value
-  const cue = progress < .2 ? 'Opening section — let’s introduce the topic.' :
+  const message = progress < .2 ? 'Opening section — let’s introduce the topic.' :
     progress > .85 ? 'We’re near the conclusion — time to summarize.' :
-    teachingPage.value % 5 === 0 ? 'Key point here — I’ll highlight this page.' :
-    'Next point — keep going!'
-  bubble.value = `Page ${teachingPage.value}/${teachingPages.value}: ${cue}`
+    teachingPage.value % 5 === 0 ? 'Key point here — I’ll highlight this page.' : 'Next point — keep going!'
+  bubble.value = `Page ${teachingPage.value}/${teachingPages.value}: ${message}`
 }
 
 function askClass() {
@@ -110,7 +129,7 @@ function askClass() {
 }
 
 function startDiscussion() {
-  bubble.value = 'Discussion time! I’ll keep the class focused. 💬'
+  bubble.value = 'Discussion time! Discuss this idea with your group. 💬'
 }
 
 function checkAgenda() {
@@ -129,8 +148,9 @@ function checkAgenda() {
 
 function handleKey(event: KeyboardEvent) {
   if (!teachingActive.value) return
-  if (event.key === 'ArrowRight' || event.key === 'PageDown') changeTeachingPage(1)
-  if (event.key === 'ArrowLeft' || event.key === 'PageUp') changeTeachingPage(-1)
+  if (event.key === 'Escape') { void teachingMode(); return }
+  if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') { event.preventDefault(); changeTeachingPage(1) }
+  if (event.key === 'ArrowLeft' || event.key === 'PageUp') { event.preventDefault(); changeTeachingPage(-1) }
   if (event.key.toLowerCase() === 'q') askClass()
   if (event.key.toLowerCase() === 'd') startDiscussion()
 }
@@ -156,58 +176,74 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="desktop" :class="{ teaching: teachingActive }">
-    <section v-if="menuOpen" class="panel">
-      <header><strong>NyanMate v0.3</strong><button @click="menuOpen=false">×</button></header>
+  <main class="desktop" :class="{ teaching: teachingActive, presenting: builtInPresentation }">
+    <template v-if="builtInPresentation && preparedPdf">
+      <PdfPresentationStage :pdf="preparedPdf" :page="teachingPage" @error="bubble = $event" />
 
-      <PdfTeachingPanel @prepared="handlePdfPrepared" @cue="handlePreparedCue" />
-
-      <div class="section">
-        <h3>📅 Quick agenda</h3>
-        <input v-model="newTitle" placeholder="Agenda title" />
-        <input v-model="newTime" type="datetime-local" />
-        <button class="primary" @click="addAgenda">Add agenda</button>
-        <div v-if="agenda.length" class="agenda-list">
-          <div v-for="item in agenda.slice(0, 3)" :key="item.id" class="agenda-row">
-            <span>{{ item.title }}<small>{{ new Date(item.startsAt).toLocaleString() }}</small></span>
-            <button @click="removeAgenda(item.id)">×</button>
-          </div>
-        </div>
+      <div class="presentation-topbar">
+        <strong>🎓 {{ teachingTopic }}</strong>
+        <span>{{ teachingPage }} / {{ teachingPages }} · {{ currentTeachingCue?.title || 'Teaching' }}</span>
+        <button @click="teachingMode">End · Esc</button>
       </div>
 
-      <div class="section teaching-setup">
-        <h3>🎓 Teaching companion</h3>
-        <input v-model="teachingTopic" placeholder="Presentation/PDF title" />
-        <div class="page-config"><span>Pages</span><input v-model.number="teachingPages" type="number" min="1" max="999" /></div>
-        <small v-if="preparedPdf" class="prepared-note">✓ {{ preparedPdf.pageCount }} PDF pages have page-aware teaching cues.</small>
-      </div>
-
-      <div class="actions">
-        <button @click="teachingMode">🎓 Start teaching</button>
-        <button @click="speak('Thinking with your AI agent…', 'thinking')">🤖 Agent demo</button>
-        <button @click="speak('Build completed successfully!', 'success', true)">✓ Success demo</button>
-        <button @click="speak('Oops — something needs attention.', 'error', true)">⚠ Error demo</button>
-      </div>
-    </section>
-
-    <div v-if="teachingActive" class="teaching-hud">
-      <strong>🎓 {{ teachingTopic }}</strong>
-      <span>Page {{ teachingPage }} / {{ teachingPages }}<template v-if="currentTeachingCue"> · {{ currentTeachingCue.title }}</template></span>
-      <div>
-        <button @click="changeTeachingPage(-1)">←</button>
+      <div class="presentation-nav">
+        <button :disabled="teachingPage <= 1" @click="changeTeachingPage(-1)">←</button>
         <button @click="askClass">❓</button>
         <button @click="startDiscussion">💬</button>
-        <button @click="changeTeachingPage(1)">→</button>
-        <button @click="teachingMode">End</button>
+        <button :disabled="teachingPage >= teachingPages" @click="changeTeachingPage(1)">→</button>
       </div>
-    </div>
 
-    <div class="bubble">{{ bubble }}</div>
-    <NyanPet :state="petState" @pet="petNyan" @menu="menuOpen=!menuOpen" />
+      <div class="teaching-pet-overlay" :class="petSide">
+        <div class="presentation-bubble">{{ bubble }}</div>
+        <NyanPet :state="petState" :draggable="false" @pet="petNyan" />
+      </div>
+    </template>
 
-    <div class="status-strip">
-      <button class="focus" @click="toggleFocus">🍅 {{ focusText }} {{ focusRunning ? 'Ⅱ' : '▶' }}</button>
-      <span v-if="nextAgenda" class="next-agenda">📅 {{ nextAgenda.title }}</span>
-    </div>
+    <template v-else>
+      <section v-if="menuOpen" class="panel">
+        <header><strong>NyanMate v0.4</strong><button @click="menuOpen=false">×</button></header>
+        <PdfTeachingPanel @prepared="handlePdfPrepared" @cue="handlePreparedCue" />
+
+        <div class="section">
+          <h3>📅 Quick agenda</h3>
+          <input v-model="newTitle" placeholder="Agenda title" />
+          <input v-model="newTime" type="datetime-local" />
+          <button class="primary" @click="addAgenda">Add agenda</button>
+          <div v-if="agenda.length" class="agenda-list">
+            <div v-for="item in agenda.slice(0, 3)" :key="item.id" class="agenda-row">
+              <span>{{ item.title }}<small>{{ new Date(item.startsAt).toLocaleString() }}</small></span>
+              <button @click="removeAgenda(item.id)">×</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section teaching-setup">
+          <h3>🎓 Teaching companion</h3>
+          <input v-model="teachingTopic" placeholder="Presentation/PDF title" />
+          <div class="page-config"><span>Pages</span><input v-model.number="teachingPages" type="number" min="1" max="999" /></div>
+          <small v-if="preparedPdf" class="prepared-note">✓ Built-in PDF presentation ready · {{ preparedPdf.pageCount }} pages.</small>
+        </div>
+
+        <div class="actions">
+          <button @click="teachingMode">🎓 {{ preparedPdf ? 'Present PDF' : 'Start teaching' }}</button>
+          <button @click="speak('Thinking with your AI agent…', 'thinking')">🤖 Agent demo</button>
+          <button @click="speak('Build completed successfully!', 'success', true)">✓ Success demo</button>
+          <button @click="speak('Oops — something needs attention.', 'error', true)">⚠ Error demo</button>
+        </div>
+      </section>
+
+      <div v-if="teachingActive" class="teaching-hud">
+        <strong>🎓 {{ teachingTopic }}</strong>
+        <span>Page {{ teachingPage }} / {{ teachingPages }}</span>
+        <div><button @click="changeTeachingPage(-1)">←</button><button @click="askClass">❓</button><button @click="startDiscussion">💬</button><button @click="changeTeachingPage(1)">→</button><button @click="teachingMode">End</button></div>
+      </div>
+
+      <div class="bubble">{{ bubble }}</div>
+      <NyanPet :state="petState" @pet="petNyan" @menu="menuOpen=!menuOpen" />
+      <div class="status-strip">
+        <button class="focus" @click="toggleFocus">🍅 {{ focusText }} {{ focusRunning ? 'Ⅱ' : '▶' }}</button>
+        <span v-if="nextAgenda" class="next-agenda">📅 {{ nextAgenda.title }}</span>
+      </div>
+    </template>
   </main>
 </template>

@@ -2,7 +2,7 @@
 
 NyanMate is a lightweight, local-first AI desktop companion built with **Tauri 2 + Vue 3 + TypeScript + Rust**. It combines an original desktop pet with productivity tools, PDF teaching support, local analytics, reminders, file inspection, and an extensible AI/coding-companion architecture.
 
-## Current prototype — v0.25.x
+## Current prototype — v0.26.x
 
 NyanMate currently includes:
 
@@ -13,8 +13,9 @@ NyanMate currently includes:
 - Pomodoro focus timer;
 - built-in PDF Teaching Mode with fullscreen presentation, semantic focus targeting, choreography, Presenter Console, presenter notes, assessments, local reports, pacing analytics, Teaching Insights, Smart Lesson Rebalancer, Teaching Templates, and Pre-Class Run Sheet;
 - AI Coding Companion state normalization for OpenCode, Codex, Claude Code, Cursor, Kiro, Antigravity, Devin, Copilot CLI, and custom agents;
-- **Drop-a-File Assistant** for local inspection of text, Markdown, JSON, common source-code files, and PDF hand-off guidance;
-- **Local Assistant Chat** with persistent local history and explicit loaded-file context consent.
+- Drop-a-File Assistant for local inspection of text, Markdown, JSON, common source-code files, and PDF hand-off guidance;
+- Local Assistant Chat with persistent local history and explicit loaded-file context consent;
+- **opt-in OpenAI-compatible provider adapter** with configurable endpoint/model, connection test, session-only API key storage, and a second explicit approval before loaded-file context can be included in a remote request.
 
 ## Desktop Pet milestones
 
@@ -46,9 +47,22 @@ A dedicated File Assistant window is available from the system tray. Users can d
 The lightweight scanner detects file type, code language, line/word counts, simple declarations/imports, readable previews, and local actions such as **Summarize**, **Explain**, and **Inspect code**. PDFs are recognized and routed toward the existing Teaching Companion workflow.
 
 ### v0.25 — Local Assistant Chat
-The File Assistant now includes a Chat tab with persistent local conversation history. This first chat engine is intentionally deterministic and offline: it can explain NyanMate features, Smart Agenda, teaching mode, coding-agent behavior, privacy, and the currently loaded file summary.
+The File Assistant includes a Chat tab with persistent local conversation history. The default chat engine is deterministic and offline. Loaded-file context is off by default and must be explicitly enabled.
 
-Loaded-file context is **off by default** and must be explicitly enabled with **Use loaded file context**. v0.25 does **not** silently call a cloud model and does not pretend that general open-ended LLM reasoning is available. External AI providers are planned as opt-in adapters in a later milestone.
+### v0.26 — Opt-in AI Provider Adapter
+The Assistant now has a **Provider** tab. By default NyanMate remains in local deterministic mode. Users can optionally switch to an **OpenAI-compatible API** and configure:
+
+- base URL;
+- model name;
+- temperature and max-token limit;
+- optional API key;
+- connection testing through the provider's `/models` endpoint.
+
+Provider configuration is stored locally, but the API key is deliberately excluded from persistent provider settings and kept only in `sessionStorage` for the current app session. It is not embedded in source code. This is a safer interim approach until a native OS keychain integration is added.
+
+Remote chat sends only normal chat messages by default. A loaded file is **not** included merely because file context is enabled locally: when a remote provider is active, NyanMate requires a second explicit approval — **Explicitly allow sending this file preview/summary to the configured provider** — before any loaded-file summary/preview is added to the request.
+
+The current adapter targets the common `/v1/models` and `/v1/chat/completions` OpenAI-compatible contract. Compatibility depends on the selected server/provider and its CORS/WebView policy. NyanMate does not bundle or hard-code any third-party API key.
 
 ## Teaching Companion milestones
 
@@ -65,7 +79,9 @@ NyanMate adds Lesson Flow planning, Quiz/Check/Practice interactions, local clas
 - Heavy AI/vision modules run only when requested
 - No camera or screen monitoring for pet mood
 - Files are not uploaded automatically
-- Cloud/AI providers must be explicit opt-in integrations
+- Cloud/AI providers are explicit opt-in integrations
+- Remote file context requires separate explicit approval
+- API keys are not committed to source code
 - Lecturer remains in control of teaching page transitions and plan changes
 - Analytics provide evidence and suggestions, not causal judgments
 - Original visuals and behavior; NyanMate is not a copy of third-party character assets
@@ -76,7 +92,7 @@ NyanMate adds Lesson Flow planning, Quiz/Check/Practice interactions, local clas
 2. **Smart Agenda** — calendar-provider integrations and stronger native notification support.
 3. **Teaching Companion** — maintain and polish existing local teaching workflow.
 4. **AI Coding Companion** — connect normalized states to real local CLI adapters.
-5. **AI Assistant** — opt-in provider adapters, richer chat, and direct file-to-teaching hand-off.
+5. **AI Assistant** — native secret storage, streaming responses, provider presets, and direct file-to-teaching hand-off.
 6. **Plugin Ecosystem** — pet packs, animations, integrations, and agent adapters.
 
 ## Development

@@ -79,6 +79,28 @@ export interface StageAnalytics {
   sessions: number
 }
 
+export type TeachingInsightKind = 'pace' | 'stage' | 'assessment' | 'coverage' | 'trend' | 'positive'
+export type TeachingInsightSeverity = 'info' | 'watch' | 'action'
+
+export interface TeachingInsight {
+  id: string
+  kind: TeachingInsightKind
+  severity: TeachingInsightSeverity
+  title: string
+  detail: string
+  recommendation: string
+  page?: number
+  stage?: string
+  metric?: string
+}
+
+export interface TeachingReflection {
+  headline: string
+  summary: string
+  strengths: string[]
+  actions: string[]
+}
+
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 export const assessmentStorageKey = (pdfName: string) => `nyanmate-assessment-${slug(pdfName)}`
 export const reportStorageKey = (pdfName: string) => `nyanmate-class-report-${slug(pdfName)}`
@@ -216,6 +238,161 @@ export function aggregateStageAnalytics(reports: ClassSessionReport[]): StageAna
       sessions: entry.sessions.size,
     }))
     .sort((a, b) => b.totalSec - a.totalSec)
+}
+
+function median(values: number[]) {
+  if (!values.length) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2)
+}
+
+function formatShort(seconds: number) {
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+}
+
+export function generateTeachingInsights(reports: ClassSessionReport[]): TeachingInsight[] {
+  if (!reports.length) return []
+  const insights: TeachingInsight[] = []
+  const pages = aggregatePageAnalytics(reports)
+  const stages = aggregateStageAnalytics(reports)
+  const baseline = median(pages.filter(item => item.sessions >= Math.min(2, reports.length)).map(item => item.averageSec).filter(Boolean))
+
+  if (baseline > 0) {
+    const slow = pages
+      .filter(item => item.averageSec >= Math.max(45, baseline * 1.7) && item.sessions >= Math.min(2, reports.length))
+      .sort((a, b) => b.averageSec - a.averageSec)
+      .slice(0, 3)
+    for (const item of slow) {
+      const ratio = Math.round((item.averageSec / baseline) * 10) / 10
+      insights.push({
+        id: `pace-slow-${item.page}`,
+        kind: 'pace',
+        severity: ratio >= 2 ? 'action' : 'watch',
+        title: `Halaman ${item.page} membutuhkan waktu lebih lama`,
+        detail: `Rata-rata ${formatShort(item.averageSec)}, sekitar ${ratio}× dibanding median halaman ${formatShort(baseline)}.`,
+        recommendation: `Periksa kepadatan materi halaman ${item.page}; pertimbangkan membagi penjelasan atau menambah contoh singkat.`,
+        page: item.page,
+        stage: item.stage,
+        metric: `${ratio}× median`,
+      })
+    }
+  }
+
+  if (stages.length) {
+    const total = stages.reduce((sum, item) => sum + item.totalSec, 0)
+    const top = stages[0]
+    const share = total ? Math.round((top.totalSec / total) * 100) : 0
+    if (share >= 35) {
+      insights.push({
+        id: `stage-${top.stage}`,
+        kind: 'stage',
+        severity: share >= 50 ? 'watch' : 'info',
+        title: `Stage ${top.stage} paling dominan`,
+        detail: `${share}% waktu terukur berada pada stage ${top.stage} (${formatShort(top.totalSec)} total).`,
+        recommendation: share >= 50 ? 'Cek apakah proporsi ini sesuai tujuan pembelajaran atau perlu diseimbangkan dengan aktivitas lain.' : 'Pertahankan jika stage ini memang menjadi fokus utama materi.',
+        stage: top.stage,
+        metric: `${share}% waktu`,
+      })
+    }
+  }
+
+  const pageAssessment = new Map<number, { answered: number; correct: number; attempts: number }>()
+  for (const report of reports) {
+    for (const result of report.assessments) {
+      const item = pageAssessment.get(result.page) ?? { answered: 0, correct: 0, attempts: 0 }
+      item.attempts += 1
+      if (result.selectedOptionId) {
+        item.answered += 1
+        if (result.correct === true) item.correct += 1
+      }
+      pageAssessment.set(result.page, item)
+    }
+  }
+  for (const [page, item] of [...pageAssessment.entries()].sort((a, b) => b[1].answered - a[1].answered)) {
+    if (item.answered < 2) continue
+    const accuracy = Math.round((item.correct / item.answered) * 100)
+    if (accuracy <= 60) {
+      insights.push({
+        id: `assessment-${page}`,
+        kind: 'assessment',
+        severity: accuracy < 40 ? 'action' : 'watch',
+        title: `Assessment halaman ${page} sering kurang tepat`,
+        detail: `Akurasi tercatat ${accuracy}% dari ${item.answered} jawaban yang direkam.`,
+        recommendation: `Tinjau kembali penjelasan sebelum assessment halaman ${page}, distraktor jawaban, dan kejelasan pertanyaannya.`,
+        page,
+        metric: `${accuracy}% akurasi`,
+      })
+    } else if (accuracy >= 85 && item.answered >= 3) {
+      insights.push({
+        id: `assessment-positive-${page}`,
+        kind: 'positive',
+        severity: 'info',
+        title: `Pemahaman di halaman ${page} terlihat kuat`,
+        detail: `Akurasi assessment mencapai ${accuracy}% dari ${item.answered} jawaban.`,
+        recommendation: 'Pertahankan pola penjelasan atau aktivitas yang digunakan sebelum assessment ini.',
+        page,
+        metric: `${accuracy}% akurasi`,
+      })
+    }
+  }
+
+  if (reports.length >= 2) {
+    const latest = reports[0].durationSec
+    const previous = reports.slice(1, 4)
+    const previousAvg = Math.round(previous.reduce((sum, report) => sum + report.durationSec, 0) / previous.length)
+    if (previousAvg > 0) {
+      const change = Math.round(((latest - previousAvg) / previousAvg) * 100)
+      if (Math.abs(change) >= 20) {
+        insights.push({
+          id: 'duration-trend',
+          kind: 'trend',
+          severity: Math.abs(change) >= 35 ? 'watch' : 'info',
+          title: change > 0 ? 'Sesi terbaru lebih panjang dari biasanya' : 'Sesi terbaru lebih singkat dari biasanya',
+          detail: `Durasi terbaru ${formatShort(latest)}, ${Math.abs(change)}% ${change > 0 ? 'lebih lama' : 'lebih cepat'} dibanding rata-rata ${previous.length} sesi sebelumnya.`,
+          recommendation: 'Bandingkan page analytics untuk melihat bagian mana yang paling berubah sebelum mengubah pacing.',
+          metric: `${change > 0 ? '+' : ''}${change}%`,
+        })
+      }
+    }
+  }
+
+  const latest = reports[0]
+  const historicalPages = new Set(reports.flatMap(report => report.pagesVisited))
+  if (historicalPages.size >= 5 && latest.pagesVisited.length < historicalPages.size * 0.7) {
+    insights.push({
+      id: 'coverage-latest',
+      kind: 'coverage',
+      severity: 'watch',
+      title: 'Cakupan sesi terbaru lebih rendah',
+      detail: `Sesi terbaru mengunjungi ${latest.pagesVisited.length} dari ${historicalPages.size} halaman yang pernah digunakan pada materi ini.`,
+      recommendation: 'Pastikan halaman yang dilewati memang disengaja, bukan karena waktu kelas habis.',
+      metric: `${latest.pagesVisited.length}/${historicalPages.size} halaman`,
+    })
+  }
+
+  return insights.slice(0, 8)
+}
+
+export function buildTeachingReflection(reports: ClassSessionReport[]): TeachingReflection {
+  if (!reports.length) return { headline: 'Belum ada data refleksi', summary: 'Selesaikan sesi mengajar untuk menghasilkan insight otomatis.', strengths: [], actions: [] }
+  const summary = summarizeReports(reports)
+  const insights = generateTeachingInsights(reports)
+  const strengths = insights.filter(item => item.kind === 'positive').map(item => item.title)
+  if (summary.accuracyPercent != null && summary.accuracyPercent >= 80) strengths.unshift(`Akurasi assessment keseluruhan ${summary.accuracyPercent}%`)
+  if (!strengths.length && reports.length >= 2) strengths.push('Data lintas sesi sudah cukup untuk mulai membandingkan pola pacing secara konsisten.')
+
+  const actions = insights
+    .filter(item => item.severity === 'action' || item.severity === 'watch')
+    .map(item => item.recommendation)
+    .filter((value, index, array) => array.indexOf(value) === index)
+    .slice(0, 4)
+
+  const latest = reports[0]
+  const headline = actions.length ? 'Ada beberapa bagian yang layak ditinjau sebelum kelas berikutnya.' : 'Pacing kelas terlihat cukup stabil dari data yang tersedia.'
+  const summaryText = `NyanMate menganalisis ${reports.length} sesi, ${summary.uniquePagesVisited} halaman unik, dan ${summary.totalAssessments} assessment. Sesi terbaru berlangsung ${formatShort(latest.durationSec)}.`
+  return { headline, summary: summaryText, strengths: strengths.slice(0, 3), actions }
 }
 
 export function reportsToCsv(reports: ClassSessionReport[]): string {

@@ -12,6 +12,11 @@ interface PresenterState {
   cueMessage: string
   textPreview: string
   notes: string
+  choreographyLabel: string
+  choreographyAction: string
+  choreographyIndex: number
+  choreographyTotal: number
+  choreographyAutoPlay: boolean
 }
 
 const state = ref<PresenterState>({
@@ -23,13 +28,21 @@ const state = ref<PresenterState>({
   cueMessage: 'Start a presentation from the NyanMate window.',
   textPreview: '',
   notes: '',
+  choreographyLabel: 'Waiting',
+  choreographyAction: 'explain',
+  choreographyIndex: 0,
+  choreographyTotal: 0,
+  choreographyAutoPlay: true,
 })
 
 let unlisten: UnlistenFn | undefined
 
 const progress = computed(() => Math.round((state.value.page / Math.max(1, state.value.total)) * 100))
+const choreographyProgress = computed(() => state.value.choreographyTotal
+  ? Math.round((state.value.choreographyIndex / state.value.choreographyTotal) * 100)
+  : 0)
 
-function control(action: 'prev' | 'next' | 'question' | 'discussion' | 'end') {
+function control(action: 'prev' | 'next' | 'question' | 'discussion' | 'cue-prev' | 'cue-next' | 'auto' | 'end') {
   void emit('presenter-control', { action })
 }
 
@@ -71,6 +84,21 @@ onUnmounted(() => unlisten?.())
       <p>{{ state.cueMessage }}</p>
     </section>
 
+    <section class="presenter-card choreography-console-card">
+      <div class="presenter-choreo-head">
+        <small>🎬 Choreography</small>
+        <span>{{ state.choreographyIndex }} / {{ state.choreographyTotal }}</span>
+      </div>
+      <h2>{{ state.choreographyLabel }}</h2>
+      <p>{{ state.choreographyAction }} · {{ choreographyProgress }}%</p>
+      <progress :value="state.choreographyIndex" :max="Math.max(1, state.choreographyTotal)"></progress>
+      <div class="presenter-choreo-controls">
+        <button @click="control('cue-prev')">← Cue</button>
+        <button :class="{ active: state.choreographyAutoPlay }" @click="control('auto')">{{ state.choreographyAutoPlay ? '⏸ Auto' : '▶ Auto' }}</button>
+        <button @click="control('cue-next')">Cue →</button>
+      </div>
+    </section>
+
     <section v-if="state.textPreview" class="presenter-card">
       <small>Slide preview</small>
       <p>{{ state.textPreview }}</p>
@@ -89,6 +117,6 @@ onUnmounted(() => unlisten?.())
       <button class="end" @click="control('end')">End presentation</button>
     </nav>
 
-    <footer>Presenter Console stays on the lecturer screen. The projector window shows only the PDF and NyanMate.</footer>
+    <footer>Presenter Console stays on the lecturer screen. The projector window shows only the PDF and NyanMate choreography.</footer>
   </main>
 </template>

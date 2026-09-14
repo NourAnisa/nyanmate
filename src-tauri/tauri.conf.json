@@ -1,55 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "NyanMate",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "identifier": "com.nouranisa.nyanmate",
-  "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
-  },
-  "app": {
-    "windows": [
-      {
-        "title": "NyanMate",
-        "label": "main",
-        "width": 430,
-        "height": 540,
-        "transparent": true,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "resizable": false,
-        "shadow": false,
-        "skipTaskbar": true
-      },
-      {
-        "title": "NyanMate Presenter",
-        "label": "presenter",
-        "width": 460,
-        "height": 760,
-        "visible": false,
-        "decorations": true,
-        "alwaysOnTop": false,
-        "resizable": true,
-        "skipTaskbar": false
-      },
-      {
-        "title": "NyanMate Class Reports",
-        "label": "reports",
-        "width": 1040,
-        "height": 760,
-        "visible": false,
-        "decorations": true,
-        "alwaysOnTop": false,
-        "resizable": true,
-        "skipTaskbar": false
-      }
-    ],
-    "security": { "csp": null }
-  },
-  "bundle": {
-    "active": true,
-    "targets": "all"
-  }
+  "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
+  "app": { "windows": [
+    { "title":"NyanMate","label":"main","width":430,"height":540,"transparent":true,"decorations":false,"alwaysOnTop":true,"resizable":false,"shadow":false,"skipTaskbar":true },
+    { "title":"NyanMate Presenter","label":"presenter","width":460,"height":760,"visible":false,"decorations":true,"alwaysOnTop":false,"resizable":true,"skipTaskbar":false },
+    { "title":"NyanMate Class Reports","label":"reports","width":1040,"height":760,"visible":false,"decorations":true,"alwaysOnTop":false,"resizable":true,"skipTaskbar":false }
+  ], "security": { "csp": null } },
+  "bundle": { "active": true, "targets": "all" }
 }

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { invoke } from '@tauri-apps/api/core'
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { availableMonitors, getCurrentWindow } from '@tauri-apps/api/window'
 import NyanPet from './components/NyanPet.vue'
 import PdfTeachingPanel from './components/PdfTeachingPanel.vue'
 import PdfPresentationStage from './components/PdfPresentationStage.vue'
@@ -22,8 +24,13 @@ const teachingTopic = ref('PDF Presentation')
 const preparedPdf = ref<PreparedPdf | null>(null)
 const presentationOpen = ref(false)
 const presenterNotesOpen = ref(false)
+const monitorNames = ref<string[]>([])
+const projectorMonitorIndex = ref(1)
+const dualMonitorMode = ref(true)
 let timer: number | undefined
 let bubbleReset: number | undefined
+let unlistenControl: UnlistenFn | undefined
+let unlistenReady: UnlistenFn | undefined
 
 const focusText = computed(() => `${String(Math.floor(focusSeconds.value / 60)).padStart(2, '0')}:${String(focusSeconds.value % 60).padStart(2, '0')}`)
 const teachingActive = computed(() => petState.value === 'teaching')
@@ -36,6 +43,7 @@ const pointStyle = computed(() => ({
   left: `${(currentTeachingCue.value?.pointTarget.x ?? .5) * 100}%`,
   top: `${(currentTeachingCue.value?.pointTarget.y ?? .5) * 100}%`,
 }))
+const dualMonitorAvailable = computed(() => monitorNames.value.length > 1)
 
 function speak(message: string, state: PetState = 'idle', autoReset = false) {
   bubble.value = message
@@ -86,6 +94,55 @@ function handlePreparedCue(cue: TeachingCue) {
   bubble.value = `Page ${cue.page}: ${cue.message}`
 }
 
+async function detectMonitors() {
+  try {
+    const monitors = await availableMonitors()
+    monitorNames.value = monitors.map((monitor, index) => monitor.name || `Display ${index + 1}`)
+    if (projectorMonitorIndex.value >= monitors.length) projectorMonitorIndex.value = Math.max(0, monitors.length - 1)
+  } catch {
+    monitorNames.value = ['Current display']
+  }
+}
+
+async function movePresentationToSelectedMonitor() {
+  if (!dualMonitorMode.value || !dualMonitorAvailable.value) return
+  try {
+    const monitors = await availableMonitors()
+    const target = monitors[projectorMonitorIndex.value]
+    if (!target) return
+    const current = getCurrentWindow()
+    await current.setFullscreen(false)
+    await current.setPosition(target.position)
+    await current.setSize(target.size)
+  } catch {
+    // Falls back to fullscreen on the current monitor.
+  }
+}
+
+async function setPresenterWindowVisible(visible: boolean) {
+  try { await invoke('set_presenter_visible', { visible }) } catch { /* browser preview */ }
+}
+
+function presenterNotesText() {
+  const auto = currentTeachingCue.value?.presenterNote ?? ''
+  const custom = localStorage.getItem(`nyanmate-note-${teachingPage.value}`) ?? ''
+  return [auto, custom].filter(Boolean).join('\n\n')
+}
+
+async function syncPresenterState() {
+  const cue = currentTeachingCue.value
+  await emit('presenter-state', {
+    active: builtInPresentation.value,
+    topic: teachingTopic.value,
+    page: teachingPage.value,
+    total: teachingPages.value,
+    cueTitle: cue?.title ?? 'Teaching',
+    cueMessage: cue?.message ?? bubble.value,
+    textPreview: cue?.textPreview ?? '',
+    notes: presenterNotesText(),
+  })
+}
+
 async function setFullscreen(value: boolean) {
   try { await getCurrentWindow().setFullscreen(value) } catch { /* Browser preview */ }
 }
@@ -94,31 +151,45 @@ async function teachingMode() {
   if (teachingActive.value) {
     presentationOpen.value = false
     presenterNotesOpen.value = false
+    await setPresenterWindowVisible(false)
     await setFullscreen(false)
     speak('Class finished. Nice teaching! 🎓', 'success', true)
+    await syncPresenterState()
   } else {
     teachingPage.value = 1
     petState.value = 'teaching'
     presentationOpen.value = Boolean(preparedPdf.value)
-    if (presentationOpen.value) await setFullscreen(true)
+    if (presentationOpen.value) {
+      await detectMonitors()
+      await movePresentationToSelectedMonitor()
+      await setFullscreen(true)
+      if (dualMonitorMode.value && dualMonitorAvailable.value) await setPresenterWindowVisible(true)
+    }
     const cue = currentTeachingCue.value
     bubble.value = cue ? `Page 1/${teachingPages.value}: ${cue.message}` : `Teaching mode ready: ${teachingTopic.value}. 🎓`
+    await syncPresenterState()
   }
   menuOpen.value = false
 }
 
-function changeTeachingPage(delta: number) {
+async function changeTeachingPage(delta: number) {
   teachingPage.value = Math.max(1, Math.min(teachingPages.value, teachingPage.value + delta))
   const cue = currentTeachingCue.value
-  if (cue) {
-    bubble.value = `Page ${teachingPage.value}/${teachingPages.value}: ${cue.message}`
-    return
-  }
-  bubble.value = `Page ${teachingPage.value}/${teachingPages.value}: Continue explaining the main idea.`
+  bubble.value = cue
+    ? `Page ${teachingPage.value}/${teachingPages.value}: ${cue.message}`
+    : `Page ${teachingPage.value}/${teachingPages.value}: Continue explaining the main idea.`
+  await syncPresenterState()
 }
 
-function askClass() { bubble.value = 'Question time! What do you think about this point? ❓' }
-function startDiscussion() { bubble.value = 'Discussion time! Discuss this idea with your group. 💬' }
+async function askClass() {
+  bubble.value = 'Question time! What do you think about this point? ❓'
+  await syncPresenterState()
+}
+
+async function startDiscussion() {
+  bubble.value = 'Discussion time! Discuss this idea with your group. 💬'
+  await syncPresenterState()
+}
 
 function checkAgenda() {
   const now = Date.now()
@@ -137,15 +208,26 @@ function checkAgenda() {
 function handleKey(event: KeyboardEvent) {
   if (!teachingActive.value) return
   if (event.key === 'Escape') { void teachingMode(); return }
-  if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') { event.preventDefault(); changeTeachingPage(1) }
-  if (event.key === 'ArrowLeft' || event.key === 'PageUp') { event.preventDefault(); changeTeachingPage(-1) }
-  if (event.key.toLowerCase() === 'q') askClass()
-  if (event.key.toLowerCase() === 'd') startDiscussion()
+  if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') { event.preventDefault(); void changeTeachingPage(1) }
+  if (event.key === 'ArrowLeft' || event.key === 'PageUp') { event.preventDefault(); void changeTeachingPage(-1) }
+  if (event.key.toLowerCase() === 'q') void askClass()
+  if (event.key.toLowerCase() === 'd') void startDiscussion()
   if (event.key.toLowerCase() === 'n') presenterNotesOpen.value = !presenterNotesOpen.value
 }
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('keydown', handleKey)
+  await detectMonitors()
+  unlistenControl = await listen<{ action: string }>('presenter-control', (event) => {
+    const action = event.payload.action
+    if (action === 'prev') void changeTeachingPage(-1)
+    if (action === 'next') void changeTeachingPage(1)
+    if (action === 'question') void askClass()
+    if (action === 'discussion') void startDiscussion()
+    if (action === 'end') void teachingMode()
+  })
+  unlistenReady = await listen('presenter-ready', () => { void syncPresenterState() })
+
   timer = window.setInterval(() => {
     checkAgenda()
     if (focusRunning.value && focusSeconds.value > 0) focusSeconds.value--
@@ -159,6 +241,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKey)
+  unlistenControl?.()
+  unlistenReady?.()
   if (timer) clearInterval(timer)
   if (bubbleReset) clearTimeout(bubbleReset)
 })
@@ -173,11 +257,11 @@ onUnmounted(() => {
       <div class="presentation-topbar">
         <strong>🎓 {{ teachingTopic }}</strong>
         <span>{{ teachingPage }} / {{ teachingPages }} · {{ currentTeachingCue?.title || 'Teaching' }}</span>
-        <button @click="presenterNotesOpen=!presenterNotesOpen">Notes · N</button>
+        <button v-if="!dualMonitorAvailable || !dualMonitorMode" @click="presenterNotesOpen=!presenterNotesOpen">Notes · N</button>
         <button @click="teachingMode">End · Esc</button>
       </div>
 
-      <PresenterNotes v-if="presenterNotesOpen" :cue="currentTeachingCue" :page="teachingPage" :total="teachingPages" />
+      <PresenterNotes v-if="presenterNotesOpen && (!dualMonitorAvailable || !dualMonitorMode)" :cue="currentTeachingCue" :page="teachingPage" :total="teachingPages" />
 
       <div class="presentation-nav">
         <button :disabled="teachingPage <= 1" @click="changeTeachingPage(-1)">←</button>
@@ -194,8 +278,17 @@ onUnmounted(() => {
 
     <template v-else>
       <section v-if="menuOpen" class="panel">
-        <header><strong>NyanMate v0.5</strong><button @click="menuOpen=false">×</button></header>
+        <header><strong>NyanMate v0.6</strong><button @click="menuOpen=false">×</button></header>
         <PdfTeachingPanel @prepared="handlePdfPrepared" @cue="handlePreparedCue" />
+
+        <div class="section dual-monitor-setup">
+          <h3>🖥️ Presenter display</h3>
+          <label class="dual-toggle"><input v-model="dualMonitorMode" type="checkbox" /> Use private presenter console when two displays are available</label>
+          <select v-if="monitorNames.length > 1" v-model.number="projectorMonitorIndex">
+            <option v-for="(name, index) in monitorNames" :key="name + index" :value="index">Projector: {{ name }}</option>
+          </select>
+          <small>{{ dualMonitorAvailable ? `${monitorNames.length} displays detected. Presenter Console will remain separate from the projected PDF.` : 'One display detected. NyanMate will use same-screen presenter notes.' }}</small>
+        </div>
 
         <div class="section">
           <h3>📅 Quick agenda</h3>
@@ -214,7 +307,7 @@ onUnmounted(() => {
           <h3>🎓 Teaching companion</h3>
           <input v-model="teachingTopic" placeholder="Presentation/PDF title" />
           <div class="page-config"><span>Pages</span><input v-model.number="teachingPages" type="number" min="1" max="999" /></div>
-          <small v-if="preparedPdf" class="prepared-note">✓ Safe-side analysis + presenter notes ready for {{ preparedPdf.pageCount }} pages.</small>
+          <small v-if="preparedPdf" class="prepared-note">✓ PDF cues, safe-side analysis, pointer targeting, and presenter console ready.</small>
         </div>
 
         <div class="actions">

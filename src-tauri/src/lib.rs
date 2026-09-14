@@ -1,12 +1,25 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager,
+    AppHandle, Manager,
 };
 
 #[tauri::command]
 fn companion_status() -> &'static str {
     "NyanMate is awake"
+}
+
+#[tauri::command]
+fn set_presenter_visible(app: AppHandle, visible: bool) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("presenter") {
+        if visible {
+            window.show().map_err(|e| e.to_string())?;
+            window.set_focus().map_err(|e| e.to_string())?;
+        } else {
+            window.hide().map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -43,7 +56,7 @@ pub fn run() {
             tray.build(app)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![companion_status])
+        .invoke_handler(tauri::generate_handler![companion_status, set_presenter_visible])
         .run(tauri::generate_context!())
         .expect("error while running NyanMate");
 }

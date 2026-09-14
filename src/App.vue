@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import NyanPet from './components/NyanPet.vue'
+import PdfTeachingPanel from './components/PdfTeachingPanel.vue'
+import type { PreparedPdf, TeachingCue } from './services/pdfTeaching'
 import type { AgendaItem, PetState } from './types'
 
 const petState = ref<PetState>('idle')
@@ -14,12 +16,14 @@ const focusRunning = ref(false)
 const teachingPage = ref(1)
 const teachingPages = ref(20)
 const teachingTopic = ref('PDF Presentation')
+const preparedPdf = ref<PreparedPdf | null>(null)
 let timer: number | undefined
 let bubbleReset: number | undefined
 
 const focusText = computed(() => `${String(Math.floor(focusSeconds.value / 60)).padStart(2, '0')}:${String(focusSeconds.value % 60).padStart(2, '0')}`)
 const teachingActive = computed(() => petState.value === 'teaching')
 const nextAgenda = computed(() => agenda.value.find(item => new Date(item.startsAt).getTime() >= Date.now()))
+const currentTeachingCue = computed(() => preparedPdf.value?.cues[teachingPage.value - 1] ?? null)
 
 function speak(message: string, state: PetState = 'idle', autoReset = false) {
   bubble.value = message
@@ -57,18 +61,42 @@ function toggleFocus() {
   speak(focusRunning.value ? 'Focus time! I’ll stay with you. 🍅' : 'Focus paused.', focusRunning.value ? 'coding' : 'idle')
 }
 
+function handlePdfPrepared(pdf: PreparedPdf) {
+  preparedPdf.value = pdf
+  teachingTopic.value = pdf.name
+  teachingPages.value = pdf.pageCount
+  teachingPage.value = 1
+  bubble.value = `PDF ready: ${pdf.name} · ${pdf.pageCount} pages. Teaching cues prepared locally. 📄✨`
+}
+
+function handlePreparedCue(cue: TeachingCue) {
+  teachingPage.value = cue.page
+  bubble.value = `Page ${cue.page}: ${cue.message}`
+}
+
 function teachingMode() {
   if (teachingActive.value) {
     speak('Class finished. Nice teaching! 🎓', 'success', true)
   } else {
     teachingPage.value = 1
-    speak(`Teaching mode ready: ${teachingTopic.value}. I’ll point and move with you! 🎓`, 'teaching')
+    petState.value = 'teaching'
+    const cue = currentTeachingCue.value
+    bubble.value = cue
+      ? `Page 1/${teachingPages.value}: ${cue.message}`
+      : `Teaching mode ready: ${teachingTopic.value}. I’ll point and move with you! 🎓`
   }
   menuOpen.value = false
 }
 
 function changeTeachingPage(delta: number) {
   teachingPage.value = Math.max(1, Math.min(teachingPages.value, teachingPage.value + delta))
+
+  const preparedCue = currentTeachingCue.value
+  if (preparedCue) {
+    bubble.value = `Page ${teachingPage.value}/${teachingPages.value}: ${preparedCue.message}`
+    return
+  }
+
   const progress = teachingPage.value / teachingPages.value
   const cue = progress < .2 ? 'Opening section — let’s introduce the topic.' :
     progress > .85 ? 'We’re near the conclusion — time to summarize.' :
@@ -130,7 +158,9 @@ onUnmounted(() => {
 <template>
   <main class="desktop" :class="{ teaching: teachingActive }">
     <section v-if="menuOpen" class="panel">
-      <header><strong>NyanMate v0.2</strong><button @click="menuOpen=false">×</button></header>
+      <header><strong>NyanMate v0.3</strong><button @click="menuOpen=false">×</button></header>
+
+      <PdfTeachingPanel @prepared="handlePdfPrepared" @cue="handlePreparedCue" />
 
       <div class="section">
         <h3>📅 Quick agenda</h3>
@@ -149,6 +179,7 @@ onUnmounted(() => {
         <h3>🎓 Teaching companion</h3>
         <input v-model="teachingTopic" placeholder="Presentation/PDF title" />
         <div class="page-config"><span>Pages</span><input v-model.number="teachingPages" type="number" min="1" max="999" /></div>
+        <small v-if="preparedPdf" class="prepared-note">✓ {{ preparedPdf.pageCount }} PDF pages have page-aware teaching cues.</small>
       </div>
 
       <div class="actions">
@@ -161,7 +192,7 @@ onUnmounted(() => {
 
     <div v-if="teachingActive" class="teaching-hud">
       <strong>🎓 {{ teachingTopic }}</strong>
-      <span>Page {{ teachingPage }} / {{ teachingPages }}</span>
+      <span>Page {{ teachingPage }} / {{ teachingPages }}<template v-if="currentTeachingCue"> · {{ currentTeachingCue.title }}</template></span>
       <div>
         <button @click="changeTeachingPage(-1)">←</button>
         <button @click="askClass">❓</button>

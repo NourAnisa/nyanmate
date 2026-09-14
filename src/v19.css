@@ -1,0 +1,10 @@
+.nyan-pet.idle-look-around .head{animation:nyan-look-around 2.4s ease-in-out infinite}.nyan-pet.idle-groom .paw-left{animation:nyan-groom-paw 1.2s ease-in-out infinite}.nyan-pet.idle-groom .head{animation:nyan-groom-head 1.2s ease-in-out infinite}.nyan-pet.idle-stretch .body{animation:nyan-stretch 2s ease-in-out infinite}.nyan-pet.idle-stretch .tail{animation:nyan-stretch-tail 2s ease-in-out infinite}.nyan-pet.idle-doze{animation:nyan-doze-breathe 3.4s ease-in-out infinite}.nyan-pet.idle-doze .tail{animation:nyan-doze-tail 3.4s ease-in-out infinite}.groom-mark{position:absolute;right:-11px;top:30px;font-size:14px;opacity:.85;animation:nyan-heart-pop 1.2s ease-in-out infinite}
+@keyframes nyan-look-around{0%,100%{transform:rotate(0deg)}35%{transform:rotate(-3deg)}70%{transform:rotate(3deg)}}
+@keyframes nyan-groom-paw{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-9px) rotate(-13deg)}}
+@keyframes nyan-groom-head{0%,100%{transform:rotate(0)}50%{transform:rotate(-5deg) translateY(2px)}}
+@keyframes nyan-stretch{0%,100%{transform:scaleY(1) translateY(0)}50%{transform:scaleY(.92) translateY(5px)}}
+@keyframes nyan-stretch-tail{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-10deg)}}
+@keyframes nyan-doze-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(2px) scale(1.01)}}
+@keyframes nyan-doze-tail{0%,100%{transform:rotate(0)}50%{transform:rotate(4deg)}}
+@keyframes nyan-heart-pop{0%,100%{transform:translateY(3px) scale(.8);opacity:.2}50%{transform:translateY(-5px) scale(1.05);opacity:1}}
+@media (prefers-reduced-motion:reduce){.nyan-pet.idle-look-around .head,.nyan-pet.idle-groom .paw-left,.nyan-pet.idle-groom .head,.nyan-pet.idle-stretch .body,.nyan-pet.idle-stretch .tail,.nyan-pet.idle-doze,.nyan-pet.idle-doze .tail,.groom-mark{animation:none!important}}

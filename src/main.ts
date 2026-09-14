@@ -9,6 +9,7 @@ import './v06.css'
 import './v07.css'
 import './v08.css'
 import './v09.css'
+import './v10.css'
 
 const Root = getCurrentWindow().label === 'presenter' ? PresenterView : App
 createApp(Root).mount('#app')

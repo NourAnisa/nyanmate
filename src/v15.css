@@ -1,0 +1,49 @@
+.lesson-rebalancer {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px;
+  background: rgba(255,255,255,.04);
+}
+.lesson-rebalancer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lesson-rebalancer-head > div { display: grid; gap: 3px; }
+.lesson-rebalancer-head small, .rebalance-footer small { opacity: .7; line-height: 1.35; }
+.rebalance-body { display: grid; gap: 8px; margin-top: 10px; }
+.rebalance-empty { margin: 0; opacity: .75; font-size: 13px; }
+.rebalance-card {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 13px;
+  border: 1px solid rgba(255,255,255,.09);
+  background: rgba(0,0,0,.12);
+}
+.rebalance-card > div { display: grid; gap: 2px; }
+.rebalance-card p { margin: 3px 0 0; font-size: 11px; opacity: .72; line-height: 1.35; }
+.rebalance-card small { opacity: .65; }
+.rebalance-card > span { font-weight: 800; font-size: 12px; }
+.rebalance-page { min-width: 58px; }
+.rebalance-accept { font-weight: 700; }
+.confidence-high { border-width: 2px; }
+.rebalance-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
+.rebalance-footer button { white-space: nowrap; font-weight: 800; }
+.lesson-page-strip button.suggested { outline: 2px dashed rgba(255,255,255,.32); outline-offset: 2px; }
+.selected-rebalance-hint {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.06);
+  font-size: 12px;
+}
+.selected-rebalance-hint > span { opacity: .72; }
+
+@media (max-width: 620px) {
+  .rebalance-card { grid-template-columns: auto 1fr auto; }
+  .rebalance-card .rebalance-accept { grid-column: 1 / -1; }
+  .rebalance-footer { align-items: stretch; flex-direction: column; }
+}

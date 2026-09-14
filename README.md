@@ -15,6 +15,7 @@ The goal is to combine a living desktop pet with productivity tools, teaching/pr
 - Dual-monitor presenter console
 - Semantic PDF focus targeting
 - Timed teaching choreography
+- Lesson Flow Editor with per-page teaching stages and timers
 - Speech bubbles and status reactions
 - Extensible AI-agent state model (OpenCode, Codex, Claude Code, Cursor, Kiro, etc.)
 - Local-first architecture; heavier AI features are intended to be opt-in and loaded on demand
@@ -41,9 +42,12 @@ NyanMate includes a dedicated **Presenter Console** window. With multiple displa
 The PDF analyzer builds normalized text boxes from the PDF text layer and classifies each page into teaching-oriented content types. It searches for relevant title, key-point, diagram/table, visual/image, formula, code, question, or summary regions, and computes a safe mascot side, target region, pointer point, focus label, and confidence score.
 
 ### v0.8 — teaching choreography
-NyanMate now has a page-level choreography state machine. Each prepared page is converted into a short sequence of teaching actions such as **enter, greet, explain, point, think, discuss, summarize, and celebrate**. The action sequence drives the mascot animation and speech bubble while keeping the semantic PDF focus target from v0.7.
+Each prepared page is converted into a short sequence of teaching actions such as **enter, greet, explain, point, think, discuss, summarize, and celebrate**. Auto mode advances cue-by-cue using local timers, while the lecturer remains in control of PDF page transitions.
 
-Auto-play can advance through the choreography steps using each step's local timer. It deliberately does **not** auto-advance to the next PDF page, so the lecturer remains in control of presentation pacing. The projected window includes a compact choreography controller, and the private Presenter Console mirrors the active action and can move to the previous/next cue or toggle Auto mode remotely.
+### v0.9 — Lesson Flow Editor
+The lecturer can now edit the teaching plan before class on a per-page basis. Each page can be assigned a stage: **Opening, Concept, Practice, Quiz, Discussion, Evaluation, or Closing**. The editor also stores a target page duration, discussion duration, whether choreography cues should auto-play, and an optional lecturer note.
+
+Lesson flow is saved locally per PDF. During presentation, the current stage and countdown are shown on the projected top bar and synchronized to the private Presenter Console. Choreography now adapts to the selected lesson stage: Practice pages get practice-oriented explanation, Quiz pages use think/discuss behavior, Discussion pages honor the configured discussion duration, Evaluation pages pause for understanding checks, and Closing pages summarize and celebrate.
 
 Presentation controls:
 
@@ -64,7 +68,7 @@ The semantic targeting layer remains heuristic and local-first. PDF text and dra
 
 1. **Living Desktop Pet** — idle, walk, sleep, petting, keyboard/mouse reactions, customization.
 2. **Smart Agenda** — daily brief, recurring reminders, countdowns, calendar integration.
-3. **Teaching Companion** — PDF/PPT/Slides presentation mode, semantic pointer targeting, teaching choreography, quiz/discussion timers, dual-display presenter console.
+3. **Teaching Companion** — PDF/PPT/Slides presentation mode, semantic pointer targeting, choreography, Lesson Flow Editor, quiz/discussion timers, dual-display presenter console.
 4. **AI Coding Companion** — normalized state adapters for OpenCode, Codex CLI, Claude Code, Cursor, Kiro, Antigravity.
 5. **AI Assistant** — floating chat, drop-a-file actions, screenshot/document assistance.
 6. **Plugin Ecosystem** — pet packs, animations, integrations and agent adapters.
@@ -90,9 +94,9 @@ npm run dev
 
 ## Current status
 
-**v0.8.x prototype** includes the mascot, pet interaction, agenda reminders, Pomodoro, system tray, local PDF preparation, fullscreen presentation, synchronized navigation, safe-side placement, presenter notes, dual-monitor Presenter Console, semantic PDF target selection, and timed page-level teaching choreography with manual and Auto controls.
+**v0.9.x prototype** includes the mascot, pet interaction, agenda reminders, Pomodoro, system tray, local PDF preparation, fullscreen presentation, synchronized navigation, safe-side placement, presenter notes, dual-monitor Presenter Console, semantic PDF target selection, timed page-level teaching choreography, and a local per-PDF Lesson Flow Editor.
 
-The next teaching milestone is configurable lesson flow: custom pause durations, discussion countdowns, per-page choreography editing, and an optional lesson-plan layer that can group pages into opening, explanation, activity, assessment, and closing sections.
+The next teaching milestone is a richer assessment/activity layer: reusable quiz prompts, discussion countdown UI, activity checkpoints, and optional post-class lesson summaries.
 
 ## Design principles
 

@@ -16,6 +16,10 @@ The goal is to combine a living desktop pet with productivity tools, teaching/pr
 - Extensible AI-agent state model (OpenCode, Codex, Claude Code, Cursor, Kiro, etc.)
 - Local-first architecture; heavier AI features are intended to be opt-in and loaded on demand
 
+## Mascot identity
+
+The official default NyanMate mascot is an original **gray-and-white chibi kitten with a burgundy scarf and gold star badge**. Activity-specific accessories appear only when needed: blue headphones + laptop for coding, and glasses + graduation cap + pointer for teaching. See `docs/MASCOT.md` for the design guide.
+
 ## Planned modules
 
 1. **Living Desktop Pet** — idle, walk, sleep, petting, keyboard/mouse reactions, customization.
@@ -46,7 +50,7 @@ npm run dev
 
 ## Current status
 
-This repository currently contains the first functional scaffold/MVP. The focus is a lightweight base before adding PDF analysis, calendar providers, and AI-agent integrations.
+**v0.2.x prototype** now includes the official mascot direction, cursor-following eyes, pet/drag interaction, agenda reminders, Pomodoro, system-tray support, activity states, and an interactive Teaching Mode scaffold. The next milestone is real PDF ingestion/rendering and page-aware teaching choreography.
 
 ## Design principles
 

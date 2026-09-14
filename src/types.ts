@@ -13,6 +13,8 @@ export interface AgendaItem {
   reminderMinutes?: number
   notes?: string
   completedAt?: string
+  snoozedUntil?: string
+  lastReminderOccurrence?: string
 }
 
 export interface AgentStatus {

@@ -2,12 +2,14 @@
 
 NyanMate is a lightweight, local-first AI desktop companion built with **Tauri 2 + Vue 3 + TypeScript + Rust**. It combines an original desktop pet with productivity tools, PDF teaching support, local analytics, reminders, and an extensible AI coding-companion architecture.
 
-## Current prototype — v0.17.x
+## Current prototype — v0.19.x
 
 NyanMate currently includes:
 
 - transparent always-on-top desktop pet with interaction states;
+- autonomous idle behavior with looking around, grooming, stretching, and local inactivity sleep;
 - local agenda reminders and Pomodoro;
+- normalized AI coding-agent states and a local coding-companion test panel;
 - built-in PDF Teaching Mode with fullscreen presentation;
 - semantic PDF focus targeting and teaching choreography;
 - dual-monitor Presenter Console and presenter notes;
@@ -18,9 +20,22 @@ NyanMate currently includes:
 - rule-based Teaching Insights and post-class reflection;
 - Plan-vs-Actual pacing and discussion-event history;
 - Smart Lesson Rebalancer using historical timing;
-- built-in Teaching Templates for theory, practicum, group discussion, and seminar classes;
-- **custom reusable teaching templates** saved locally;
-- **Pre-Class Run Sheet** with total planned time, stage breakdown, assessment pages, discussion pages, checkpoints, and long-duration pages.
+- built-in and custom reusable Teaching Templates;
+- Pre-Class Run Sheet with stage breakdown, checkpoints, assessments, and discussion pages.
+
+## Desktop Companion milestones
+
+### v0.18 — AI Coding Companion
+NyanMate now normalizes coding-agent activity into a shared state contract: **idle, starting, thinking, coding, running, waiting, success, error**. Profiles are prepared for OpenCode, Codex, Claude Code, Cursor, Kiro, Antigravity, Devin, Copilot CLI, and custom adapters.
+
+The mascot reacts to those normalized states, while a local test panel acts as a development harness for future real CLI adapters. Teaching Mode keeps priority so coding-agent events do not interrupt a class presentation.
+
+### v0.19 — Living Pet Behavior
+The desktop pet now has an autonomous lightweight idle-life loop. While the externally controlled state is `idle`, NyanMate can look around, groom, stretch, rest, and eventually nap after local inactivity. Keyboard/pointer activity inside the NyanMate window wakes the pet again.
+
+This layer intentionally remains event/light-timer based and does **not** continuously inspect the screen, camera, microphone, or user files. The current inactivity detection is local to the NyanMate window; operating-system-wide activity hooks can be added later only if they are worth the platform complexity.
+
+Animations respect `prefers-reduced-motion`.
 
 ## Teaching Companion milestones
 
@@ -43,9 +58,7 @@ Historical pacing can generate conservative duration suggestions. Suggestions re
 Built-in templates allocate a chosen class duration across reusable teaching patterns such as **Kuliah Teori**, **Praktikum**, **Diskusi Kelompok**, and **Presentasi Seminar**.
 
 ### v0.17 — Custom Templates + Pre-Class Run Sheet
-An edited Lesson Flow can now be saved as a named personal template and reused on another PDF. If the new PDF has a different page count, NyanMate maps the saved page pattern proportionally while preserving the target PDF's lecturer notes.
-
-The **Pre-Class Run Sheet** summarizes the active Lesson Flow before class: total planned duration, page count, stage totals, assessment pages, discussion pages, combined checkpoints, and unusually long pages. This gives the lecturer a compact readiness check without sending teaching data to a cloud service.
+An edited Lesson Flow can be saved as a named personal template and reused on another PDF. The Pre-Class Run Sheet summarizes total planned duration, stage totals, assessment pages, discussion pages, checkpoints, and unusually long pages.
 
 ## Presentation controls
 
@@ -68,17 +81,20 @@ The **Pre-Class Run Sheet** summarizes the active Lesson Flow before class: tota
 - Heavy AI/vision modules run only when requested
 - Lecturer remains in control of page transitions and plan changes
 - Analytics provide evidence and suggestions, not causal judgments
-- Templates are explicit user actions, never silent plan changes
+- Teaching templates are explicit user actions, never silent plan changes
+- Desktop-pet behavior avoids always-on screen/camera monitoring
 - Original visuals and behavior; NyanMate is not a copy of third-party character assets
 
 ## Planned modules
 
-1. **Living Desktop Pet** — richer idle/walk/sleep interactions and customization.
-2. **Smart Agenda** — recurring reminders, daily brief, and calendar integrations.
-3. **Teaching Companion** — continue toward reusable class workflows and optional anonymous response collection.
-4. **AI Coding Companion** — normalized adapters for OpenCode, Codex CLI, Claude Code, Cursor, Kiro, Antigravity, and others.
-5. **AI Assistant** — floating chat and drop-a-file actions.
+1. **Living Desktop Pet** — walking/position behaviors, richer reactions, mood, and customization.
+2. **AI Coding Companion** — real adapters for OpenCode first, then other supported coding agents.
+3. **Smart Agenda** — recurring reminders, daily brief, and calendar integrations.
+4. **AI Assistant** — floating chat and drop-a-file actions.
+5. **Teaching Companion** — polish existing presentation, analytics, and reusable class workflows.
 6. **Plugin Ecosystem** — pet packs, animations, integrations, and agent adapters.
+
+Anonymous student-response / QR-session collection is intentionally **not** part of the current roadmap.
 
 ## Development
 

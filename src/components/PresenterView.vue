@@ -1,0 +1,86 @@
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
+
+interface PresenterState {
+  active: boolean
+  topic: string
+  page: number
+  total: number
+  cueTitle: string
+  cueMessage: string
+  textPreview: string
+  notes: string
+}
+
+const state = ref<PresenterState>({
+  active: false,
+  topic: 'NyanMate Teaching',
+  page: 1,
+  total: 1,
+  cueTitle: 'Waiting',
+  cueMessage: 'Start a presentation from the NyanMate window.',
+  textPreview: '',
+  notes: '',
+})
+
+let unlisten: UnlistenFn | undefined
+
+const progress = computed(() => Math.round((state.value.page / Math.max(1, state.value.total)) * 100))
+
+function control(action: 'prev' | 'next' | 'question' | 'discussion' | 'end') {
+  void emit('presenter-control', { action })
+}
+
+onMounted(async () => {
+  unlisten = await listen<PresenterState>('presenter-state', (event) => {
+    state.value = event.payload
+  })
+  await emit('presenter-ready')
+})
+
+onUnmounted(() => unlisten?.())
+</script>
+
+<template>
+  <main class="presenter-console">
+    <header class="presenter-console-header">
+      <div>
+        <small>NyanMate Presenter Console</small>
+        <h1>{{ state.topic }}</h1>
+      </div>
+      <span class="presenter-live" :class="{ active: state.active }">{{ state.active ? 'LIVE' : 'STANDBY' }}</span>
+    </header>
+
+    <section class="presenter-progress-card">
+      <div><strong>Page {{ state.page }} / {{ state.total }}</strong><span>{{ progress }}%</span></div>
+      <progress :value="state.page" :max="state.total"></progress>
+    </section>
+
+    <section class="presenter-card cue">
+      <small>Teaching cue</small>
+      <h2>{{ state.cueTitle }}</h2>
+      <p>{{ state.cueMessage }}</p>
+    </section>
+
+    <section v-if="state.textPreview" class="presenter-card">
+      <small>Slide preview</small>
+      <p>{{ state.textPreview }}</p>
+    </section>
+
+    <section class="presenter-card notes-card">
+      <small>Private presenter notes</small>
+      <p>{{ state.notes || 'No additional notes for this page.' }}</p>
+    </section>
+
+    <nav class="presenter-console-controls">
+      <button @click="control('prev')">← Previous</button>
+      <button @click="control('question')">❓ Ask</button>
+      <button @click="control('discussion')">💬 Discuss</button>
+      <button @click="control('next')">Next →</button>
+      <button class="end" @click="control('end')">End presentation</button>
+    </nav>
+
+    <footer>Presenter Console stays on the lecturer screen. The projector window shows only the PDF and NyanMate.</footer>
+  </main>
+</template>

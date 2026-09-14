@@ -1,0 +1,51 @@
+name: Windows Installer Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build and publish Windows installers
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'NyanMate v__VERSION__'
+          releaseBody: |
+            NyanMate desktop installer for Windows.
+
+            Recommended: download the `setup.exe` installer for the easiest installation.
+            An `.msi` installer is also provided for users who prefer Windows Installer packages.
+
+            Note: this build is currently unsigned, so Windows SmartScreen may show a warning until code signing is configured.
+          releaseDraft: false
+          prerelease: true
+          args: '--bundles nsis,msi'

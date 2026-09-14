@@ -3,7 +3,11 @@ import { computed, ref } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { PetState } from '../types'
 
-const props = withDefaults(defineProps<{ state: PetState; draggable?: boolean }>(), { draggable: true })
+const props = withDefaults(defineProps<{
+  state: PetState
+  draggable?: boolean
+  pointerDirection?: 'left' | 'right'
+}>(), { draggable: true, pointerDirection: 'right' })
 const emit = defineEmits<{ (e: 'pet'): void; (e: 'menu'): void }>()
 
 const eyeX = ref(0)
@@ -20,18 +24,11 @@ function trackEyes(event: MouseEvent) {
   eyeY.value = Math.max(-2, Math.min(2, y * 6))
 }
 
-function resetEyes() {
-  eyeX.value = 0
-  eyeY.value = 0
-}
+function resetEyes() { eyeX.value = 0; eyeY.value = 0 }
 
 async function startDrag(event: MouseEvent) {
   if (!props.draggable || event.button !== 0) return
-  try {
-    await getCurrentWindow().startDragging()
-  } catch {
-    // Browser preview: dragging is only available inside Tauri.
-  }
+  try { await getCurrentWindow().startDragging() } catch { /* Browser preview */ }
 }
 
 function pet() {
@@ -44,7 +41,7 @@ function pet() {
 <template>
   <div
     class="nyan-pet"
-    :class="[stateClass, { petting: isPetting, 'drag-disabled': !draggable }]"
+    :class="[stateClass, `pointer-${pointerDirection}`, { petting: isPetting, 'drag-disabled': !draggable }]"
     @mousemove="trackEyes"
     @mouseleave="resetEyes"
     @mousedown="startDrag"

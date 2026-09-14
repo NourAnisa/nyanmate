@@ -19,6 +19,9 @@ export interface PetSettings {
   cursorHunting: boolean
   keyboardReactions: boolean
   scrollReactions: boolean
+  soundVolume: number
+  customFurColor: string
+  customEyeColor: string
 }
 
 const STORAGE_KEY = 'nyanmate-pet-settings-v1'
@@ -26,14 +29,21 @@ const STORAGE_KEY = 'nyanmate-pet-settings-v1'
 export const defaultPetSettings: PetSettings = {
   name: 'NyanMate', ownerName: '', character: 'momo', personality: 'gentle', accessory: 'scarf', motionLevel: 'normal', sleepAfterMinutes: 3,
   autonomousMovement: true, stretchReminderMinutes: 45, waterReminderMinutes: 60, fixedMessage: '', peekingMode: false, cursorHunting: true, keyboardReactions: true, scrollReactions: true,
+  soundVolume: 35, customFurColor: '', customEyeColor: '',
 }
 export const personalityLabels: Record<PetPersonality,string> = { gentle:'Gentle', playful:'Playful', focused:'Focused', sleepy:'Sleepy' }
 export const characterLabels: Record<PetCharacter,string> = { momo:'Momo · Gray & White', kuro:'Kuro · Black', mikan:'Mikan · Orange Tabby', yuki:'Yuki · Snow White', sora:'Sora · Blue Gray', mocha:'Mocha · Brown', sakura:'Sakura · Cream', tora:'Tora · Tiger Tabby' }
 export const petCharacters: PetCharacter[] = ['momo','kuro','mikan','yuki','sora','mocha','sakura','tora']
 
+function safeColor(value:string|undefined){
+  const color=(value||'').trim()
+  return /^#[0-9a-fA-F]{6}$/.test(color)?color:''
+}
+
 export function normalizePetSettings(value?: Partial<PetSettings>|null): PetSettings {
   const personality: PetPersonality[]=['gentle','playful','focused','sleepy'], accessory:PetAccessory[]=['scarf','bell','bow','none'], motionLevel:PetMotionLevel[]=['low','normal','high']
   const clampMinutes=(n:number|undefined,fallback:number)=>Math.max(0,Math.min(720,Math.round(Number.isFinite(n as number)?n as number:fallback)))
+  const volume=Number.isFinite(value?.soundVolume as number)?Number(value?.soundVolume):defaultPetSettings.soundVolume
   return {
     name:(value?.name||defaultPetSettings.name).trim().slice(0,24)||defaultPetSettings.name,
     ownerName:(value?.ownerName||'').trim().slice(0,32),
@@ -50,6 +60,9 @@ export function normalizePetSettings(value?: Partial<PetSettings>|null): PetSett
     cursorHunting:value?.cursorHunting??true,
     keyboardReactions:value?.keyboardReactions??true,
     scrollReactions:value?.scrollReactions??true,
+    soundVolume:Math.max(0,Math.min(100,Math.round(volume))),
+    customFurColor:safeColor(value?.customFurColor),
+    customEyeColor:safeColor(value?.customEyeColor),
   }
 }
 export function loadPetSettings():PetSettings{try{return normalizePetSettings(JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'))}catch{return{...defaultPetSettings}}}

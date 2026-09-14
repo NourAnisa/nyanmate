@@ -19,6 +19,7 @@ The goal is to combine a living desktop pet with productivity tools, teaching/pr
 - Local quiz / check / practice interactions
 - Post-class local session reports
 - Class Report Dashboard with history, recap, CSV export, and print-to-PDF
+- Teaching Analytics with per-page dwell time and stage timing
 - Speech bubbles and status reactions
 - Extensible AI-agent state model (OpenCode, Codex, Claude Code, Cursor, Kiro, etc.)
 - Local-first architecture; heavier AI features are intended to be opt-in and loaded on demand
@@ -60,9 +61,16 @@ During presentation, the lecturer can launch the assessment from the projected n
 NyanMate records lightweight local session data when a presentation ends: start/end time, class duration, PDF pages visited, assessment attempts, selected answer, correctness when an answer was selected, and whether the answer was revealed. This is a local teaching summary, not a student identity or grading system.
 
 ### v0.11 — Class Report Dashboard
-NyanMate now keeps up to 100 local session reports per PDF and maintains a material index for the report viewer. A dedicated **Class Reports** window can be opened from the system-tray menu without interrupting the desktop pet.
+NyanMate keeps up to 100 local session reports per PDF and maintains a material index for the report viewer. A dedicated **Class Reports** window can be opened from the system-tray menu without interrupting the desktop pet.
 
 The dashboard shows session count, total and average teaching time, unique pages visited, assessment count, and answer accuracy for recorded attempts. A lecturer can inspect individual sessions, page coverage, and assessment results. **Export CSV** downloads the report history for the selected material, while **Print / Save PDF** uses the operating system print dialog with a print-friendly report layout.
+
+### v0.12 — Teaching Analytics
+NyanMate now measures the actual time spent on each PDF page while Teaching Mode is active. Every page timing record stores the page number, its current Lesson Flow stage, total dwell time, and number of visits during the session. When a page is revisited, time continues accumulating instead of creating a duplicate row.
+
+At the end of class, page timing is aggregated into **stage timing** for Opening, Concept, Practice, Quiz, Discussion, Evaluation, and Closing. The Class Report Dashboard can compare multiple recorded sessions and show average time per page, total visits, number of sessions containing each page, total time per lesson stage, and average stage time across sessions.
+
+The dashboard uses simple local bar visualizations rather than a heavy charting library. CSV export now includes serialized page-timing and stage-timing data. Older v0.10/v0.11 reports remain readable; they simply have no detailed timing analytics until a new v0.12 session is recorded.
 
 Presentation controls:
 
@@ -86,7 +94,7 @@ The semantic targeting layer remains heuristic and local-first. PDF text and dra
 
 1. **Living Desktop Pet** — idle, walk, sleep, petting, keyboard/mouse reactions, customization.
 2. **Smart Agenda** — daily brief, recurring reminders, countdowns, calendar integration.
-3. **Teaching Companion** — PDF/PPT/Slides presentation mode, semantic pointer targeting, choreography, Lesson Flow Editor, assessments, activity checkpoints, Class Report Dashboard, dual-display presenter console.
+3. **Teaching Companion** — PDF/PPT/Slides presentation mode, semantic pointer targeting, choreography, Lesson Flow Editor, assessments, Class Report Dashboard, Teaching Analytics, dual-display presenter console.
 4. **AI Coding Companion** — normalized state adapters for OpenCode, Codex CLI, Claude Code, Cursor, Kiro, Antigravity.
 5. **AI Assistant** — floating chat, drop-a-file actions, screenshot/document assistance.
 6. **Plugin Ecosystem** — pet packs, animations, integrations and agent adapters.
@@ -112,9 +120,9 @@ npm run dev
 
 ## Current status
 
-**v0.11.x prototype** includes the mascot, pet interaction, agenda reminders, Pomodoro, system tray, local PDF preparation, fullscreen presentation, synchronized navigation, safe-side placement, presenter notes, dual-monitor Presenter Console, semantic PDF target selection, timed teaching choreography, Lesson Flow Editor, per-page assessment configuration, projected quiz/check/practice interactions, answer reveal, local class-report history, a dedicated Class Reports window, CSV export, and print-to-PDF support.
+**v0.12.x prototype** includes the mascot, pet interaction, agenda reminders, Pomodoro, system tray, local PDF preparation, fullscreen presentation, synchronized navigation, safe-side placement, presenter notes, dual-monitor Presenter Console, semantic PDF target selection, timed teaching choreography, Lesson Flow Editor, per-page assessment configuration, projected quiz/check/practice interactions, answer reveal, local class-report history, a dedicated Class Reports window, CSV export, print-to-PDF support, per-page dwell-time tracking, and lesson-stage timing analytics.
 
-The next teaching milestone can add richer analytics such as stage-by-stage timing, page dwell time, discussion timing history, comparison across repeated classes, and optional anonymous student-response collection through a local QR/session code without student accounts.
+The next teaching milestone can add **discussion-event history and session comparison intelligence**: flag pages that consistently run over their planned duration, detect stages that consume disproportionate class time, compare recent sessions against earlier ones, and generate a compact post-class reflection summary. Anonymous student-response collection through a local QR/session code can remain a later opt-in module.
 
 ## Design principles
 

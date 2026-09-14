@@ -52,12 +52,12 @@ export function materializeUpcoming(items: AgendaItem[], from = new Date(), days
       result.push({ item, occurrence: new Date(cursor) })
       guard++
       if ((item.repeat ?? 'none') === 'none') break
-      cursor = nextOccurrence({ ...item, startsAt: new Date(cursor.getTime() + 1000).toISOString() }, new Date(cursor.getTime() + 1000))
-      if ((item.repeat ?? 'none') === 'daily') cursor = new Date(result[result.length - 1].occurrence.getTime() + 86_400_000)
-      if ((item.repeat ?? 'none') === 'weekly') cursor = new Date(result[result.length - 1].occurrence.getTime() + 7 * 86_400_000)
-      if ((item.repeat ?? 'none') === 'monthly') {
-        cursor = new Date(result[result.length - 1].occurrence)
-        cursor.setMonth(cursor.getMonth() + 1)
+      if ((item.repeat ?? 'none') === 'daily') cursor = new Date(cursor.getTime() + 86_400_000)
+      else if ((item.repeat ?? 'none') === 'weekly') cursor = new Date(cursor.getTime() + 7 * 86_400_000)
+      else {
+        const next = new Date(cursor)
+        next.setMonth(next.getMonth() + 1)
+        cursor = next
       }
     }
     return result
@@ -72,7 +72,13 @@ export function agendaForDay(items: AgendaItem[], day: Date) {
 
 export function countdownLabel(target: Date, now = new Date()) {
   const diff = target.getTime() - now.getTime()
-  if (diff <= 0) return 'now'
+  if (diff <= 0 && diff > -60_000) return 'now'
+  if (diff < 0) {
+    const minutes = Math.floor(Math.abs(diff) / 60_000)
+    if (minutes < 60) return `${Math.max(1, minutes)}m ago`
+    const hours = Math.floor(minutes / 60)
+    return `${hours}h ago`
+  }
   const minutes = Math.ceil(diff / 60_000)
   if (minutes < 60) return `in ${minutes}m`
   const hours = Math.floor(minutes / 60)
@@ -91,10 +97,35 @@ export function buildDailyBrief(items: AgendaItem[], now = new Date()) {
   return `Today: ${today.length} item${today.length === 1 ? '' : 's'}, ${remainingText}. Next: ${first.item.title} at ${first.occurrence.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
 }
 
+export function snoozeAgendaItem(item: AgendaItem, minutes: number, now = new Date()) {
+  item.snoozedUntil = new Date(now.getTime() + Math.max(1, minutes) * 60_000).toISOString()
+  item.reminded = false
+}
+
+export function clearAgendaSnooze(item: AgendaItem) {
+  item.snoozedUntil = undefined
+}
+
 export function dueReminder(items: AgendaItem[], now = new Date()) {
+  for (const item of items) {
+    const snooze = item.snoozedUntil ? new Date(item.snoozedUntil) : null
+    if (snooze && !Number.isNaN(snooze.getTime())) {
+      if (snooze.getTime() > now.getTime()) continue
+      const occurrence = nextOccurrence(item, new Date(now.getTime() - 24 * 60 * 60_000))
+      if (occurrence) return { item, occurrence, snoozed: true }
+    }
+  }
+
   return materializeUpcoming(items, now, 1).find(({ item, occurrence }) => {
     const reminderMs = Math.max(0, item.reminderMinutes ?? 10) * 60_000
     const diff = occurrence.getTime() - now.getTime()
-    return diff > 0 && diff <= reminderMs
+    if (!(diff > 0 && diff <= reminderMs)) return false
+    return item.lastReminderOccurrence !== occurrence.toISOString()
   }) ?? null
+}
+
+export function markReminderShown(item: AgendaItem, occurrence: Date) {
+  item.lastReminderOccurrence = occurrence.toISOString()
+  item.snoozedUntil = undefined
+  item.reminded = true
 }

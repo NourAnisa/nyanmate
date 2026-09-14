@@ -26,7 +26,12 @@ The official default NyanMate mascot is an original **gray-and-white chibi kitte
 A PDF can be dropped into NyanMate before class. PDF.js parses it locally, reads the page count and text layer, and creates lightweight teaching cues such as opening/title, key points, chart/visual, formula/metric, code, question/discussion, summary, and general explanation.
 
 ### v0.4 — built-in presentation
-NyanMate now renders the prepared PDF inside its own presentation surface. Starting Teaching Mode with a prepared PDF switches the desktop window to fullscreen, displays the real PDF page, and keeps the displayed page synchronized with NyanMate's cue and animation.
+NyanMate renders the prepared PDF inside its own fullscreen presentation surface and keeps the displayed page synchronized with the teaching cue and mascot animation.
+
+### v0.5 — safe placement + presenter notes
+NyanMate now estimates text density on the left and right side of every PDF page. It chooses the less crowded side as a **safe side** for the mascot, calculates a normalized focus target from the page text layout, and flips the teaching pointer so it faces toward the material.
+
+Each page also gets an automatically generated presenter note. Press `N` during a presentation to open the notes panel and add your own page-specific notes; custom notes are stored locally in the browser/Tauri storage.
 
 Controls:
 
@@ -34,9 +39,10 @@ Controls:
 - `←` or `PageUp`: previous page
 - `Q`: question prompt
 - `D`: discussion prompt
+- `N`: toggle presenter notes
 - `Esc`: end presentation
 
-NyanMate moves between the left and right side of the presentation based on the page gesture so it is less likely to cover the material. Rendering and cue preparation remain local-first.
+The current presenter-notes panel is still part of the same presentation window. **True dual-monitor presenter mode**—private notes on the lecturer laptop while the projector shows only the PDF + NyanMate—requires a separate presenter window and explicit monitor routing and is a later milestone.
 
 External Adobe Reader/browser page tracking is not implemented yet; the reliable path is the built-in NyanMate presentation surface.
 
@@ -44,7 +50,7 @@ External Adobe Reader/browser page tracking is not implemented yet; the reliable
 
 1. **Living Desktop Pet** — idle, walk, sleep, petting, keyboard/mouse reactions, customization.
 2. **Smart Agenda** — daily brief, recurring reminders, countdowns, calendar integration.
-3. **Teaching Companion** — PDF/PPT/Slides presentation mode, pointer gestures, quiz/discussion timers, presenter notes.
+3. **Teaching Companion** — PDF/PPT/Slides presentation mode, pointer gestures, quiz/discussion timers, dual-display presenter notes.
 4. **AI Coding Companion** — normalized state adapters for OpenCode, Codex CLI, Claude Code, Cursor, Kiro, Antigravity.
 5. **AI Assistant** — floating chat, drop-a-file actions, screenshot/document assistance.
 6. **Plugin Ecosystem** — pet packs, animations, integrations and agent adapters.
@@ -70,9 +76,9 @@ npm run dev
 
 ## Current status
 
-**v0.4.x prototype** includes the official mascot direction, cursor-following eyes, pet/drag interaction, agenda reminders, Pomodoro, system-tray support, activity states, local PDF preparation, fullscreen PDF rendering, synchronized page navigation, and page-aware NyanMate choreography.
+**v0.5.x prototype** includes the mascot, cursor-following eyes, pet/drag interaction, agenda reminders, Pomodoro, system tray, activity states, local PDF preparation, fullscreen PDF rendering, synchronized navigation, content-density-based safe-side placement, focus targeting, and local presenter notes.
 
-Next teaching milestones include smarter content-region detection, presenter notes on a second display, pointer targeting within the slide, and optional support for external presentation applications.
+The next teaching milestone is true dual-monitor presenter mode, followed by richer target detection for diagrams/images and optional support for external presentation applications.
 
 ## Design principles
 

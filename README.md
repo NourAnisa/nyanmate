@@ -21,6 +21,7 @@ The goal is to combine a living desktop pet with productivity tools, teaching/pr
 - Class Report Dashboard with history, recap, CSV export, and print-to-PDF
 - Teaching Analytics with per-page dwell time and stage timing
 - Teaching Insights with pacing, assessment, coverage, trend, and reflection rules
+- Plan-vs-Actual pacing analytics and discussion-event history
 - Speech bubbles and status reactions
 - Extensible AI-agent state model (OpenCode, Codex, Claude Code, Cursor, Kiro, etc.)
 - Local-first architecture; heavier AI features are intended to be opt-in and loaded on demand
@@ -72,18 +73,29 @@ NyanMate measures the actual time spent on each PDF page while Teaching Mode is 
 At the end of class, page timing is aggregated into **stage timing** for Opening, Concept, Practice, Quiz, Discussion, Evaluation, and Closing. The Class Report Dashboard compares multiple sessions and shows average time per page, total visits, number of sessions containing each page, total time per lesson stage, and average stage time across sessions.
 
 ### v0.13 — Teaching Insights
-The Class Report Dashboard now includes a lightweight rule-based **Teaching Insights** engine. It analyzes local report history and surfaces pacing outliers, dominant lesson stages, low/high assessment accuracy, session-duration changes, and reduced page coverage.
+The Class Report Dashboard includes a lightweight rule-based **Teaching Insights** engine. It analyzes local report history and surfaces pacing outliers, dominant lesson stages, low/high assessment accuracy, session-duration changes, and reduced page coverage.
 
 Pacing detection uses the median observed page dwell time as a robust local baseline and flags pages that consistently take much longer than typical pages. Assessment insight requires multiple recorded answers before flagging a page, reducing conclusions from one-off results. Session trend insight compares the latest class against the previous few sessions rather than using a cloud model.
 
 A **Post-class Reflection** panel summarizes the evidence, highlights strengths, and turns watch/action insights into concrete preparation suggestions for the next class. The engine is deterministic, local-first, and advisory: it does not claim that longer time or lower quiz accuracy automatically means poor teaching.
+
+### v0.14 — Plan vs Actual + Discussion History
+Each class report now stores a snapshot of the Lesson Flow target duration for every page. The dashboard compares those targets with measured page dwell time across sessions and classifies pacing as **Under**, **On target**, or **Over** using a ±20% tolerance band.
+
+Plan-vs-Actual analytics show target time, average actual time, variance percentage, number of sessions, and stage for each page. Teaching Insights can flag pages that repeatedly exceed the configured target and can also recognize pages that are consistently faster than planned.
+
+Every time the lecturer starts a discussion using the discussion control, NyanMate records a local discussion event with page, lesson stage, start timestamp, and configured discussion duration. The dashboard aggregates those events to show which pages most often trigger discussion and includes the event history in individual session reports.
+
+CSV export now includes planned page timing and discussion-event data. Older reports remain readable; they simply do not contribute to v0.14 plan-vs-actual metrics until new sessions are recorded.
+
+The v0.14 presentation polish also wires NyanMate's choreography action directly into the mascot component and only renders the semantic focus marker during the `point` choreography action.
 
 Presentation controls:
 
 - `→`, `PageDown`, or `Space`: next PDF page
 - `←` or `PageUp`: previous PDF page
 - `Q`: question prompt
-- `D`: discussion prompt
+- `D`: start and record a discussion event
 - `E`: open / close configured assessment for the current page
 - `1`–`4`: choose A–D while an assessment is open
 - `R`: reveal assessment answer
@@ -100,7 +112,7 @@ The semantic targeting and Teaching Insights layers are both intentionally light
 
 1. **Living Desktop Pet** — idle, walk, sleep, petting, keyboard/mouse reactions, customization.
 2. **Smart Agenda** — daily brief, recurring reminders, countdowns, calendar integration.
-3. **Teaching Companion** — PDF/PPT/Slides presentation mode, semantic pointer targeting, choreography, Lesson Flow Editor, assessments, Class Report Dashboard, Teaching Analytics, Teaching Insights, dual-display presenter console.
+3. **Teaching Companion** — PDF/PPT/Slides presentation mode, semantic pointer targeting, choreography, Lesson Flow Editor, assessments, Class Report Dashboard, Teaching Analytics, Teaching Insights, Plan-vs-Actual, dual-display presenter console.
 4. **AI Coding Companion** — normalized state adapters for OpenCode, Codex CLI, Claude Code, Cursor, Kiro, Antigravity.
 5. **AI Assistant** — floating chat, drop-a-file actions, screenshot/document assistance.
 6. **Plugin Ecosystem** — pet packs, animations, integrations and agent adapters.
@@ -126,9 +138,9 @@ npm run dev
 
 ## Current status
 
-**v0.13.x prototype** includes the mascot, pet interaction, agenda reminders, Pomodoro, system tray, local PDF preparation, fullscreen presentation, synchronized navigation, safe-side placement, presenter notes, dual-monitor Presenter Console, semantic PDF target selection, timed teaching choreography, Lesson Flow Editor, per-page assessments, local report history, CSV export, print-to-PDF, per-page/stage timing analytics, automatic teaching insights, and post-class reflection suggestions.
+**v0.14.x prototype** includes the mascot, pet interaction, agenda reminders, Pomodoro, system tray, local PDF preparation, fullscreen presentation, synchronized navigation, safe-side placement, presenter notes, dual-monitor Presenter Console, semantic PDF target selection, timed teaching choreography, Lesson Flow Editor, per-page assessments, local report history, CSV export, print-to-PDF, per-page/stage timing analytics, automatic teaching insights, post-class reflection suggestions, target-vs-actual pacing, and discussion-event history.
 
-The next teaching milestone can focus on **discussion-event history and plan-vs-actual pacing** by storing each page's configured target time in session analytics. A later opt-in milestone can add anonymous student-response collection through a local QR/session code without student accounts.
+The next teaching milestone can focus on **session recommendations and reusable teaching templates**: use historical pacing to suggest revised page durations and let the lecturer accept those suggestions back into the Lesson Flow. A later opt-in milestone can add anonymous student-response collection through a local QR/session code without student accounts.
 
 ## Design principles
 

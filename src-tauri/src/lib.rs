@@ -1,8 +1,19 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
+use serde::Serialize;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeInputEvent {
+    kind: &'static str,
+    x: Option<f64>,
+    y: Option<f64>,
+    delta_x: Option<i64>,
+    delta_y: Option<i64>,
+}
 
 #[tauri::command]
 fn companion_status() -> &'static str { "NyanMate is awake" }
@@ -15,6 +26,33 @@ fn set_window_visible(app: &AppHandle, label: &str, visible: bool) -> Result<(),
         } else { window.hide().map_err(|e| e.to_string())?; }
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn start_global_input_bridge(app: AppHandle) {
+    std::thread::spawn(move || {
+        use rdev::{listen, EventType};
+        let emitter = app.clone();
+        let result = listen(move |event| {
+            let payload = match event.event_type {
+                EventType::KeyPress(_) => Some(NativeInputEvent { kind: "key", x: None, y: None, delta_x: None, delta_y: None }),
+                EventType::MouseMove { x, y } => Some(NativeInputEvent { kind: "mouseMove", x: Some(x), y: Some(y), delta_x: None, delta_y: None }),
+                EventType::Wheel { delta_x, delta_y } => Some(NativeInputEvent { kind: "wheel", x: None, y: None, delta_x: Some(delta_x), delta_y: Some(delta_y) }),
+                _ => None,
+            };
+            if let Some(payload) = payload {
+                let _ = emitter.emit_to("main", "native-input-event", payload);
+            }
+        });
+        if let Err(error) = result {
+            let _ = app.emit_to("main", "native-input-status", format!("Global input listener unavailable: {error:?}"));
+        }
+    });
+}
+
+#[cfg(not(target_os = "windows"))]
+fn start_global_input_bridge(app: AppHandle) {
+    let _ = app.emit_to("main", "native-input-status", "System-wide input reactions are currently enabled on Windows only.");
 }
 
 #[tauri::command]
@@ -30,6 +68,7 @@ fn set_assistant_visible(app: AppHandle, visible: bool) -> Result<(), String> { 
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            start_global_input_bridge(app.handle().clone());
             let show = MenuItem::with_id(app, "show", "Show NyanMate", true, None::<&str>)?;
             let assistant = MenuItem::with_id(app, "assistant", "Drop-a-File Assistant", true, None::<&str>)?;
             let agenda = MenuItem::with_id(app, "agenda", "Smart Agenda", true, None::<&str>)?;

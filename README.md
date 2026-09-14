@@ -16,6 +16,8 @@ The goal is to combine a living desktop pet with productivity tools, teaching/pr
 - Semantic PDF focus targeting
 - Timed teaching choreography
 - Lesson Flow Editor with per-page teaching stages and timers
+- Local quiz / check / practice interactions
+- Post-class local session reports
 - Speech bubbles and status reactions
 - Extensible AI-agent state model (OpenCode, Codex, Claude Code, Cursor, Kiro, etc.)
 - Local-first architecture; heavier AI features are intended to be opt-in and loaded on demand
@@ -45,9 +47,16 @@ The PDF analyzer builds normalized text boxes from the PDF text layer and classi
 Each prepared page is converted into a short sequence of teaching actions such as **enter, greet, explain, point, think, discuss, summarize, and celebrate**. Auto mode advances cue-by-cue using local timers, while the lecturer remains in control of PDF page transitions.
 
 ### v0.9 — Lesson Flow Editor
-The lecturer can now edit the teaching plan before class on a per-page basis. Each page can be assigned a stage: **Opening, Concept, Practice, Quiz, Discussion, Evaluation, or Closing**. The editor also stores a target page duration, discussion duration, whether choreography cues should auto-play, and an optional lecturer note.
+The lecturer can edit the teaching plan before class on a per-page basis. Each page can be assigned a stage: **Opening, Concept, Practice, Quiz, Discussion, Evaluation, or Closing**. The editor also stores a target page duration, discussion duration, whether choreography cues should auto-play, and an optional lecturer note.
 
-Lesson flow is saved locally per PDF. During presentation, the current stage and countdown are shown on the projected top bar and synchronized to the private Presenter Console. Choreography now adapts to the selected lesson stage: Practice pages get practice-oriented explanation, Quiz pages use think/discuss behavior, Discussion pages honor the configured discussion duration, Evaluation pages pause for understanding checks, and Closing pages summarize and celebrate.
+Lesson flow is saved locally per PDF. During presentation, the current stage and countdown are shown on the projected top bar and synchronized to the private Presenter Console. Choreography adapts to the selected lesson stage.
+
+### v0.10 — assessment & classroom interaction
+A local **Assessment Editor** can attach a Quiz, Check, or Practice interaction to any PDF page. Each interaction stores a question, four editable options, the correct option, countdown time, and a reveal explanation. All assessment data is stored locally per PDF.
+
+During presentation, the lecturer can launch the assessment from the projected navigation or Presenter Console. Students see a large student-facing question overlay with countdown, answer choices, selected state, answer reveal, and explanation. The lecturer can control Start, Reveal, and Close from the private Presenter Console. Keyboard control is also available: `E` opens/closes the page assessment, `1`–`4` select A–D, and `R` reveals the answer while the assessment is open.
+
+NyanMate records lightweight local session data when a presentation ends: start/end time, class duration, PDF pages visited, assessment attempts, selected answer, correctness when an answer was selected, and whether the answer was revealed. This is a local teaching summary, not a student identity or grading system.
 
 Presentation controls:
 
@@ -55,10 +64,13 @@ Presentation controls:
 - `←` or `PageUp`: previous PDF page
 - `Q`: question prompt
 - `D`: discussion prompt
+- `E`: open / close configured assessment for the current page
+- `1`–`4`: choose A–D while an assessment is open
+- `R`: reveal assessment answer
 - `N`: toggle same-screen presenter notes when dual-monitor mode is unavailable/off
 - `[` / `]`: previous / next choreography cue
 - `A`: toggle choreography Auto mode
-- `Esc`: end presentation
+- `Esc`: close assessment first, otherwise end presentation
 
 Monitor routing depends on the operating system and connected display topology. Users should verify the selected projector display before class. External Adobe Reader/browser page tracking is not implemented yet; the reliable path is the built-in NyanMate presentation surface.
 
@@ -68,7 +80,7 @@ The semantic targeting layer remains heuristic and local-first. PDF text and dra
 
 1. **Living Desktop Pet** — idle, walk, sleep, petting, keyboard/mouse reactions, customization.
 2. **Smart Agenda** — daily brief, recurring reminders, countdowns, calendar integration.
-3. **Teaching Companion** — PDF/PPT/Slides presentation mode, semantic pointer targeting, choreography, Lesson Flow Editor, quiz/discussion timers, dual-display presenter console.
+3. **Teaching Companion** — PDF/PPT/Slides presentation mode, semantic pointer targeting, choreography, Lesson Flow Editor, assessments, activity checkpoints, post-class summaries, dual-display presenter console.
 4. **AI Coding Companion** — normalized state adapters for OpenCode, Codex CLI, Claude Code, Cursor, Kiro, Antigravity.
 5. **AI Assistant** — floating chat, drop-a-file actions, screenshot/document assistance.
 6. **Plugin Ecosystem** — pet packs, animations, integrations and agent adapters.
@@ -94,9 +106,9 @@ npm run dev
 
 ## Current status
 
-**v0.9.x prototype** includes the mascot, pet interaction, agenda reminders, Pomodoro, system tray, local PDF preparation, fullscreen presentation, synchronized navigation, safe-side placement, presenter notes, dual-monitor Presenter Console, semantic PDF target selection, timed page-level teaching choreography, and a local per-PDF Lesson Flow Editor.
+**v0.10.x prototype** includes the mascot, pet interaction, agenda reminders, Pomodoro, system tray, local PDF preparation, fullscreen presentation, synchronized navigation, safe-side placement, presenter notes, dual-monitor Presenter Console, semantic PDF target selection, timed teaching choreography, Lesson Flow Editor, per-page assessment configuration, projected quiz/check/practice interactions, answer reveal, and local post-class session reports.
 
-The next teaching milestone is a richer assessment/activity layer: reusable quiz prompts, discussion countdown UI, activity checkpoints, and optional post-class lesson summaries.
+The next teaching milestone is a dedicated **Class Report viewer/export** with timeline, assessment recap, time-per-section summary, and optional CSV/PDF export. A later milestone can add anonymous student-response collection through a local QR/session code without requiring student accounts.
 
 ## Design principles
 

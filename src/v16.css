@@ -1,0 +1,71 @@
+.teaching-template-panel {
+  margin: 12px 0;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 16px;
+  background: rgba(255,255,255,.035);
+  overflow: hidden;
+}
+
+.teaching-template-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+}
+.teaching-template-head > div { display: grid; gap: 3px; }
+.teaching-template-head small { opacity: .66; }
+.teaching-template-body { padding: 0 12px 12px; display: grid; gap: 12px; }
+.teaching-template-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.teaching-template-grid > button {
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  min-height: 96px;
+  padding: 11px;
+  border-radius: 13px;
+  border: 1px solid rgba(255,255,255,.09);
+  background: rgba(255,255,255,.035);
+}
+.teaching-template-grid > button.active { border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.09); }
+.teaching-template-grid span { font-size: 11px; opacity: .7; line-height: 1.35; }
+.teaching-template-grid small { opacity: .78; }
+.teaching-template-apply {
+  display: grid;
+  grid-template-columns: 150px 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+.teaching-template-apply label { display: grid; gap: 5px; font-size: 12px; }
+.teaching-template-apply input { width: 100%; }
+.template-stage-preview { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.template-stage-preview span {
+  font-size: 11px;
+  padding: 5px 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.065);
+}
+.template-apply-button { min-height: 38px; font-weight: 700; }
+.template-applied-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.055);
+}
+.template-applied-summary > strong { width: 100%; }
+.template-applied-summary > span {
+  font-size: 11px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.07);
+}
+.template-applied-summary > small { width: 100%; opacity: .68; line-height: 1.4; }
+
+@media (max-width: 700px) {
+  .teaching-template-grid { grid-template-columns: 1fr; }
+  .teaching-template-apply { grid-template-columns: 1fr; }
+  .template-apply-button { width: 100%; }
+}

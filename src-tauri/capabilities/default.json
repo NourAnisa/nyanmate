@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-capability",
-  "description": "Desktop permissions for the NyanMate main window.",
-  "windows": ["main"],
+  "description": "Desktop permissions for NyanMate windows.",
+  "windows": ["main", "presenter", "reports"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

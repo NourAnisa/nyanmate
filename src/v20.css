@@ -1,0 +1,21 @@
+.nyan-pet{transition:transform 1.8s ease}
+.nyan-pet.mood-curious .head{animation:nyan-curious 2.8s ease-in-out infinite}
+.nyan-pet.mood-playful .tail{animation:nyan-tail-play 1s ease-in-out infinite alternate}
+.nyan-pet.mood-sleepy .head{transform:translateY(3px) rotate(2deg)}
+.nyan-pet.activity-groom .paw-left{animation:nyan-groom-paw 1.1s ease-in-out infinite}
+.nyan-pet.activity-stretch .body{animation:nyan-stretch 1.5s ease-in-out infinite alternate}
+.nyan-pet.activity-look-around .head{animation:nyan-look 2.2s ease-in-out infinite}
+.nyan-pet.activity-doze{filter:saturate(.9)}
+.nyan-pet.activity-doze .body{animation:nyan-breathe 2.8s ease-in-out infinite}
+.mood-heart,.mood-mark{position:absolute;right:-10px;top:16px;font-weight:800;pointer-events:none}
+.mood-heart{font-size:17px;animation:nyan-heart 1.6s ease-in-out infinite}
+.mood-mark{font-size:18px;animation:nyan-mark 2s ease-in-out infinite}
+@keyframes nyan-curious{0%,100%{transform:rotate(0)}50%{transform:rotate(-5deg)}}
+@keyframes nyan-tail-play{from{transform:rotate(-4deg)}to{transform:rotate(11deg)}}
+@keyframes nyan-groom-paw{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-8px) rotate(-16deg)}}
+@keyframes nyan-stretch{from{transform:scaleX(1)}to{transform:scaleX(1.04) translateY(2px)}}
+@keyframes nyan-look{0%,100%{transform:translateX(0)}35%{transform:translateX(-3px) rotate(-2deg)}70%{transform:translateX(3px) rotate(2deg)}}
+@keyframes nyan-breathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.025)}}
+@keyframes nyan-heart{0%,100%{transform:translateY(0) scale(.9);opacity:.55}50%{transform:translateY(-7px) scale(1.1);opacity:1}}
+@keyframes nyan-mark{0%,100%{transform:translateY(0);opacity:.6}50%{transform:translateY(-4px);opacity:1}}
+@media (prefers-reduced-motion:reduce){.nyan-pet,.nyan-pet *{animation:none!important;transition:none!important}}

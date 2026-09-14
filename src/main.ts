@@ -13,6 +13,7 @@ import './v09.css'
 import './v10.css'
 import './v11.css'
 import './v12.css'
+import './v13.css'
 
 const label = getCurrentWindow().label
 const Root = label === 'presenter' ? PresenterView : label === 'reports' ? ClassReportDashboard : App

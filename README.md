@@ -2,7 +2,7 @@
 
 NyanMate is a lightweight, local-first AI desktop companion built with **Tauri 2 + Vue 3 + TypeScript + Rust**. It combines an original desktop pet with productivity tools, PDF teaching support, local analytics, reminders, and an extensible AI coding-companion architecture.
 
-## Current prototype — v0.21.x
+## Current prototype — v0.22.x
 
 NyanMate currently includes:
 
@@ -12,7 +12,9 @@ NyanMate currently includes:
 - lightweight micro-roaming inside the companion window;
 - persistent pet personality and customization settings;
 - configurable pet name, accessory, motion level, sleep timeout, and autonomous movement;
-- local agenda reminders and Pomodoro;
+- **Smart Agenda** with one-time, daily, weekly, and monthly recurrence;
+- configurable reminder lead time, countdowns, today view, 14-day upcoming view, and daily brief;
+- Pomodoro focus timer;
 - built-in PDF Teaching Mode with fullscreen presentation;
 - semantic PDF focus targeting and teaching choreography;
 - dual-monitor Presenter Console and presenter notes;
@@ -39,18 +41,22 @@ The mascot gained lightweight autonomous idle activities such as looking around,
 NyanMate gained a deterministic local mood layer with **calm, curious, playful, and sleepy** states. Mood is derived from recent local interaction and inactivity rather than camera, microphone, or screen surveillance. A bounded roaming pattern makes the mascot feel more alive without constantly moving the operating-system window.
 
 ### v0.21 — Personality + Customization
-The desktop pet now has persistent local customization. Right-click the mascot to open **Pet Customization** and choose:
+Right-click the mascot to configure pet name, personality, accessory, motion intensity, sleep timeout, and autonomous movement. Settings remain local on the device.
 
-- a pet name;
-- personality: **Gentle, Playful, Focused, or Sleepy**;
-- accessory: signature scarf, bell, bow, or none;
-- low, normal, or high motion intensity;
-- sleep timeout from 1–30 minutes;
-- autonomous movement on/off.
+## Productivity milestones
 
-Personality changes behavior rather than only labels. Playful pets roam more and remain awake longer, Focused pets move less, Sleepy pets settle down sooner, and Gentle keeps the balanced default behavior. Settings are stored locally on the device and do not require an account or cloud service.
+### v0.22 — Smart Agenda
+Smart Agenda now has its own desktop window, available from the NyanMate system tray. Agenda data remains compatible with the earlier local `nyanmate-agenda` storage.
 
-The mascot tooltip still exposes lightweight Energy and Affection values for debugging/feedback. Active coding, teaching, success, error, and other externally controlled states take priority over autonomous behavior. Animations respect `prefers-reduced-motion`.
+An agenda item can now be **one-time, daily, weekly, or monthly**, with a configurable reminder lead time and optional notes. The dashboard provides:
+
+- a local **Daily Brief** summarizing today's schedule;
+- a **Today** view with live countdown labels;
+- a **Next 14 days** recurring occurrence preview;
+- completion and removal controls;
+- local persistence with no account or cloud requirement.
+
+Existing one-time agenda entries are migrated safely by treating missing recurrence fields as `none` and missing reminder lead time as 10 minutes.
 
 ## Teaching Companion milestones
 
@@ -88,7 +94,7 @@ Edited Lesson Flows can be saved as reusable personal templates. The Pre-Class R
 ## Planned modules
 
 1. **Living Desktop Pet** — continue with richer reactions, optional accessory packs, and polished movement.
-2. **Smart Agenda** — recurring reminders, daily brief, and calendar integrations.
+2. **Smart Agenda** — add recurring-item editing, calendar import/export, and optional desktop notifications.
 3. **Teaching Companion** — maintain and polish existing local teaching workflow.
 4. **AI Coding Companion** — connect normalized states to real local CLI adapters.
 5. **AI Assistant** — floating chat and drop-a-file actions.

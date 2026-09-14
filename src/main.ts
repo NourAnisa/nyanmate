@@ -32,6 +32,7 @@ import './v25.css'
 import './v26.css'
 import './v27.css'
 import './v28.css'
+import './v32.css'
 
 type NativeInputEvent = {
   kind: 'key' | 'mouseMove' | 'wheel'
@@ -54,10 +55,6 @@ const Root = label === 'presenter'
 
 createApp(Root).mount('#app')
 
-// v0.31: Native input feedback is applied at the root document level so
-// keyboard/mouse/scroll reactions remain visible even while Pomodoro puts the
-// mascot in the `coding` state. The Rust bridge emits only event type and
-// pointer coordinates; typed characters are never sent to the frontend.
 if (label === 'main') {
   const root = document.documentElement
   const timers = new Map<string, number>()
@@ -80,17 +77,13 @@ if (label === 'main') {
       keyHits = keyHits.filter(time => now - time < 1800)
       keyHits.push(now)
       pulse('native-key-active', 260)
-      if (keyHits.length >= 11) {
-        pulse('native-overheat-active', 2300)
-      }
+      if (keyHits.length >= 11) pulse('native-overheat-active', 2300)
       return
     }
-
     if (payload.kind === 'wheel') {
       pulse('native-scroll-active', 800)
       return
     }
-
     if (payload.kind === 'mouseMove' && typeof payload.x === 'number' && typeof payload.y === 'number') {
       const now = performance.now()
       const dt = Math.max(8, now - lastPointer.t)

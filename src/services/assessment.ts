@@ -29,6 +29,18 @@ export interface AssessmentResult {
   answeredAt?: string
 }
 
+export interface PageTiming {
+  page: number
+  stage: string
+  seconds: number
+  visits: number
+}
+
+export interface StageTiming {
+  stage: string
+  seconds: number
+}
+
 export interface ClassSessionReport {
   pdfName: string
   startedAt: string
@@ -36,6 +48,8 @@ export interface ClassSessionReport {
   durationSec: number
   pagesVisited: number[]
   assessments: AssessmentResult[]
+  pageTimings?: PageTiming[]
+  stageTimings?: StageTiming[]
 }
 
 export interface ReportSummary {
@@ -47,6 +61,22 @@ export interface ReportSummary {
   correctAssessments: number
   accuracyPercent: number | null
   uniquePagesVisited: number
+}
+
+export interface PageAnalytics {
+  page: number
+  stage: string
+  totalSec: number
+  averageSec: number
+  totalVisits: number
+  sessions: number
+}
+
+export interface StageAnalytics {
+  stage: string
+  totalSec: number
+  averageSec: number
+  sessions: number
 }
 
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
@@ -136,18 +166,72 @@ export function summarizeReports(reports: ClassSessionReport[]): ReportSummary {
   }
 }
 
+export function aggregatePageAnalytics(reports: ClassSessionReport[]): PageAnalytics[] {
+  const map = new Map<number, { stage: string; totalSec: number; totalVisits: number; sessions: Set<number> }>()
+  reports.forEach((report, sessionIndex) => {
+    for (const item of report.pageTimings ?? []) {
+      const entry = map.get(item.page) ?? { stage: item.stage || 'concept', totalSec: 0, totalVisits: 0, sessions: new Set<number>() }
+      entry.stage = item.stage || entry.stage
+      entry.totalSec += Math.max(0, item.seconds)
+      entry.totalVisits += Math.max(1, item.visits || 1)
+      entry.sessions.add(sessionIndex)
+      map.set(item.page, entry)
+    }
+  })
+  return [...map.entries()]
+    .map(([page, entry]) => ({
+      page,
+      stage: entry.stage,
+      totalSec: entry.totalSec,
+      averageSec: entry.sessions.size ? Math.round(entry.totalSec / entry.sessions.size) : 0,
+      totalVisits: entry.totalVisits,
+      sessions: entry.sessions.size,
+    }))
+    .sort((a, b) => a.page - b.page)
+}
+
+export function aggregateStageAnalytics(reports: ClassSessionReport[]): StageAnalytics[] {
+  const map = new Map<string, { totalSec: number; sessions: Set<number> }>()
+  reports.forEach((report, sessionIndex) => {
+    const stageEntries = report.stageTimings?.length
+      ? report.stageTimings
+      : (report.pageTimings ?? []).reduce<StageTiming[]>((acc, item) => {
+          const found = acc.find(stage => stage.stage === item.stage)
+          if (found) found.seconds += item.seconds
+          else acc.push({ stage: item.stage || 'concept', seconds: item.seconds })
+          return acc
+        }, [])
+    for (const item of stageEntries) {
+      const entry = map.get(item.stage) ?? { totalSec: 0, sessions: new Set<number>() }
+      entry.totalSec += Math.max(0, item.seconds)
+      entry.sessions.add(sessionIndex)
+      map.set(item.stage, entry)
+    }
+  })
+  return [...map.entries()]
+    .map(([stage, entry]) => ({
+      stage,
+      totalSec: entry.totalSec,
+      averageSec: entry.sessions.size ? Math.round(entry.totalSec / entry.sessions.size) : 0,
+      sessions: entry.sessions.size,
+    }))
+    .sort((a, b) => b.totalSec - a.totalSec)
+}
+
 export function reportsToCsv(reports: ClassSessionReport[]): string {
-  const header = ['pdfName','startedAt','finishedAt','durationSec','pagesVisited','assessmentPage','assessmentKind','selectedOptionId','correct','revealed','answeredAt']
+  const header = ['pdfName','startedAt','finishedAt','durationSec','pagesVisited','pageTimings','stageTimings','assessmentPage','assessmentKind','selectedOptionId','correct','revealed','answeredAt']
   const rows: string[][] = [header]
   const quote = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
+  const pageTimingsText = (report: ClassSessionReport) => (report.pageTimings ?? []).map(item => `${item.page}:${item.stage}:${item.seconds}s:${item.visits}v`).join('|')
+  const stageTimingsText = (report: ClassSessionReport) => (report.stageTimings ?? []).map(item => `${item.stage}:${item.seconds}s`).join('|')
   for (const report of reports) {
     if (!report.assessments.length) {
-      rows.push([report.pdfName, report.startedAt, report.finishedAt, String(report.durationSec), report.pagesVisited.join('|'), '', '', '', '', '', ''])
+      rows.push([report.pdfName, report.startedAt, report.finishedAt, String(report.durationSec), report.pagesVisited.join('|'), pageTimingsText(report), stageTimingsText(report), '', '', '', '', '', ''])
       continue
     }
     for (const result of report.assessments) {
       rows.push([
-        report.pdfName, report.startedAt, report.finishedAt, String(report.durationSec), report.pagesVisited.join('|'),
+        report.pdfName, report.startedAt, report.finishedAt, String(report.durationSec), report.pagesVisited.join('|'), pageTimingsText(report), stageTimingsText(report),
         String(result.page), result.kind, result.selectedOptionId ?? '', result.correct == null ? '' : String(result.correct), String(result.revealed), result.answeredAt ?? '',
       ])
     }

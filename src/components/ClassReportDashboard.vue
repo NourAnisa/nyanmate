@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import {
+  aggregateDiscussionAnalytics,
   aggregatePageAnalytics,
+  aggregatePlanVsActual,
   aggregateStageAnalytics,
   buildTeachingReflection,
   generateTeachingInsights,
@@ -23,12 +25,15 @@ const activePdf = computed(() => props.pdfName || selectedPdf.value)
 const summary = computed(() => summarizeReports(reports.value))
 const pageAnalytics = computed(() => aggregatePageAnalytics(reports.value))
 const stageAnalytics = computed(() => aggregateStageAnalytics(reports.value))
+const planActual = computed(() => aggregatePlanVsActual(reports.value))
+const discussionAnalytics = computed(() => aggregateDiscussionAnalytics(reports.value))
 const insights = computed(() => generateTeachingInsights(reports.value))
 const reflection = computed(() => buildTeachingReflection(reports.value))
 const selectedReport = computed(() => reports.value[selectedIndex.value] ?? null)
 const maxPageAverage = computed(() => Math.max(1, ...pageAnalytics.value.map(item => item.averageSec)))
 const maxStageTotal = computed(() => Math.max(1, ...stageAnalytics.value.map(item => item.totalSec)))
 const durationText = (seconds: number) => `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+const signedPercent = (value: number) => `${value > 0 ? '+' : ''}${value}%`
 
 function load() {
   availablePdfs.value = loadReportIndex()
@@ -64,7 +69,7 @@ watch(() => props.pdfName, load, { immediate: true })
     <section class="report-dashboard">
       <div class="report-dashboard-head">
         <div>
-          <small>🧠 NyanMate Teaching Insights</small>
+          <small>🧭 NyanMate Plan vs Actual</small>
           <h3>{{ activePdf || 'No class reports yet' }}</h3>
         </div>
         <div class="report-actions">
@@ -109,6 +114,30 @@ watch(() => props.pdfName, load, { immediate: true })
               <h4>{{ item.title }}</h4>
               <p>{{ item.detail }}</p>
               <small>{{ item.recommendation }}</small>
+            </article>
+          </div>
+        </section>
+
+        <section class="analytics-section plan-actual-section" v-if="planActual.length">
+          <div class="analytics-head"><div><small>🎯 Plan vs actual</small><h4>Target Lesson Flow dibanding waktu aktual</h4></div><span>{{ planActual.length }} pages</span></div>
+          <div class="plan-actual-table">
+            <article v-for="item in planActual" :key="item.page" class="plan-actual-row" :class="`plan-${item.status}`">
+              <div><strong>Page {{ item.page }}</strong><small>{{ item.stage }} · {{ item.sessions }} session</small></div>
+              <span><small>Target</small><b>{{ durationText(item.targetSec) }}</b></span>
+              <span><small>Actual</small><b>{{ durationText(item.averageActualSec) }}</b></span>
+              <span class="variance"><small>Variance</small><b>{{ signedPercent(item.variancePercent) }}</b></span>
+              <em>{{ item.status === 'over' ? 'Over' : item.status === 'under' ? 'Under' : 'On target' }}</em>
+            </article>
+          </div>
+        </section>
+
+        <section class="analytics-section discussion-history" v-if="discussionAnalytics.length">
+          <div class="analytics-head"><div><small>💬 Discussion history</small><h4>Halaman yang paling sering memicu diskusi</h4></div><span>{{ discussionAnalytics.reduce((sum, item) => sum + item.count, 0) }} events</span></div>
+          <div class="discussion-grid">
+            <article v-for="item in discussionAnalytics" :key="item.page">
+              <strong>Page {{ item.page }}</strong>
+              <span>{{ item.count }} discussion{{ item.count === 1 ? '' : 's' }}</span>
+              <small>{{ item.stage }} · {{ item.sessions }} session · planned avg {{ durationText(item.averagePlannedSec) }}</small>
             </article>
           </div>
         </section>
@@ -164,6 +193,13 @@ watch(() => props.pdfName, load, { immediate: true })
             <h4>Time per page</h4>
             <div v-for="item in selectedReport.pageTimings" :key="item.page" class="session-timing-row">
               <strong>Page {{ item.page }}</strong><span>{{ item.stage }}</span><b>{{ durationText(item.seconds) }}</b><small>{{ item.visits }} visit{{ item.visits === 1 ? '' : 's' }}</small>
+            </div>
+          </div>
+
+          <div v-if="selectedReport.discussionEvents?.length" class="session-timing-table">
+            <h4>Discussion events</h4>
+            <div v-for="(item, index) in selectedReport.discussionEvents" :key="`${item.startedAt}-${index}`" class="session-timing-row discussion-row">
+              <strong>Page {{ item.page }}</strong><span>{{ item.stage }}</span><b>{{ item.plannedSec ? durationText(item.plannedSec) : 'Open' }}</b><small>{{ new Date(item.startedAt).toLocaleTimeString() }}</small>
             </div>
           </div>
 

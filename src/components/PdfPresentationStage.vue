@@ -21,8 +21,8 @@ const emit = defineEmits<{
 const canvas = ref<HTMLCanvasElement | null>(null)
 const loading = ref(false)
 let documentTask: ReturnType<typeof pdfjsLib.getDocument> | null = null
-let pdfDocument: Awaited<ReturnType<ReturnType<typeof pdfjsLib.getDocument>['promise']['then']>> | null = null
-let renderTask: { cancel: () => void; promise: Promise<unknown> } | null = null
+let pdfDocument: any = null
+let renderTask: any = null
 
 async function loadDocument() {
   try {

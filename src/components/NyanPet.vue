@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { PetState } from '../types'
-import { activityLabel, chooseIdleActivity, type PetIdleActivity } from '../services/petLife'
+import { chooseIdleActivity, type PetIdleActivity } from '../services/petLife'
+import { buildPetMood, moodLabel, type PetMood } from '../services/petMood'
 
 const props = withDefaults(defineProps<{
   state: PetState
@@ -16,23 +17,32 @@ const eyeX = ref(0)
 const eyeY = ref(0)
 const isPetting = ref(false)
 const idleActivity = ref<PetIdleActivity>('rest')
-const lastLocalActivity = ref(Date.now())
-let idleCycle = 0
+const mood = ref<PetMood>('calm')
+const energy = ref(78)
+const affection = ref(45)
+const roamX = ref(0)
+const roamY = ref(0)
+const lastInteractionAt = ref(Date.now())
+const recentPets = ref(0)
+let cycleIndex = 0
 let lifeTimer: number | undefined
-const sleepAfterMs = 3 * 60 * 1000
 
-const autonomousSleep = computed(() => props.state === 'idle' && idleActivity.value === 'doze')
-const displayState = computed<PetState>(() => autonomousSleep.value ? 'sleeping' : props.state)
-const stateClass = computed(() => `state-${displayState.value}`)
-const activityClass = computed(() => props.state === 'idle' ? `idle-${idleActivity.value}` : '')
-const showThought = computed(() => displayState.value === 'thinking' || props.choreographyAction === 'think')
-const showSparkles = computed(() => displayState.value === 'success' || props.choreographyAction === 'celebrate')
-const titleText = computed(() => props.draggable
-  ? `NyanMate is ${activityLabel(idleActivity.value)} • click to pet • double-click for menu • drag to move`
-  : 'NyanMate teaching companion')
+const stateClass = computed(() => `state-${props.state}`)
+const activityClass = computed(() => `activity-${idleActivity.value}`)
+const moodClass = computed(() => `mood-${mood.value}`)
+const showThought = computed(() => props.state === 'thinking' || props.choreographyAction === 'think')
+const showSparkles = computed(() => props.state === 'success' || props.choreographyAction === 'celebrate')
+const autonomous = computed(() => props.state === 'idle' || props.state === 'sleeping')
+const petStyle = computed(() => autonomous.value ? { transform: `translate(${roamX.value}px, ${roamY.value}px)` } : undefined)
+const lifeTitle = computed(() => `Mood: ${moodLabel(mood.value)} · Energy ${energy.value}% · Affection ${affection.value}%`)
+
+function registerInteraction() {
+  lastInteractionAt.value = Date.now()
+  if (props.state === 'sleeping') idleActivity.value = 'rest'
+}
 
 function trackEyes(event: MouseEvent) {
-  markActivity()
+  registerInteraction()
   const el = event.currentTarget as HTMLElement
   const rect = el.getBoundingClientRect()
   const x = (event.clientX - (rect.left + rect.width / 2)) / rect.width
@@ -42,63 +52,61 @@ function trackEyes(event: MouseEvent) {
 }
 
 function resetEyes() { eyeX.value = 0; eyeY.value = 0 }
-function markActivity() {
-  lastLocalActivity.value = Date.now()
-  if (idleActivity.value === 'doze') idleActivity.value = 'rest'
-}
-
-function updatePetLife() {
-  if (props.state !== 'idle') {
-    idleActivity.value = 'rest'
-    return
-  }
-  idleCycle += 1
-  idleActivity.value = chooseIdleActivity(Date.now() - lastLocalActivity.value, idleCycle, sleepAfterMs).activity
-}
 
 async function startDrag(event: MouseEvent) {
-  markActivity()
+  registerInteraction()
   if (!props.draggable || event.button !== 0) return
   try { await getCurrentWindow().startDragging() } catch { /* Browser preview */ }
 }
 
 function pet() {
-  markActivity()
+  registerInteraction()
+  recentPets.value = Math.min(8, recentPets.value + 1)
   isPetting.value = true
   emit('pet')
   window.setTimeout(() => (isPetting.value = false), 700)
 }
 
-function globalLocalActivity() { markActivity() }
+function updateLife() {
+  if (!autonomous.value) {
+    idleActivity.value = 'rest'
+    roamX.value = 0
+    roamY.value = 0
+    return
+  }
 
-watch(() => props.state, state => {
-  if (state !== 'idle') idleActivity.value = 'rest'
-  else markActivity()
-})
+  const inactiveMs = Date.now() - lastInteractionAt.value
+  const life = chooseIdleActivity(inactiveMs, cycleIndex, 180_000)
+  idleActivity.value = life.activity
+  const snapshot = buildPetMood({ inactiveMs, recentPets: recentPets.value, cycleIndex })
+  mood.value = snapshot.mood
+  energy.value = snapshot.energy
+  affection.value = snapshot.affection
+  roamX.value = life.asleep ? 0 : snapshot.roamX
+  roamY.value = life.asleep ? 3 : snapshot.roamY
+  cycleIndex += 1
+  if (cycleIndex % 3 === 0 && recentPets.value > 0) recentPets.value -= 1
+}
 
 onMounted(() => {
-  window.addEventListener('keydown', globalLocalActivity)
-  window.addEventListener('pointerdown', globalLocalActivity)
-  lifeTimer = window.setInterval(updatePetLife, 10_000)
+  updateLife()
+  lifeTimer = window.setInterval(updateLife, 12_000)
 })
 
-onUnmounted(() => {
-  window.removeEventListener('keydown', globalLocalActivity)
-  window.removeEventListener('pointerdown', globalLocalActivity)
-  if (lifeTimer) clearInterval(lifeTimer)
-})
+onUnmounted(() => { if (lifeTimer) clearInterval(lifeTimer) })
 </script>
 
 <template>
   <div
     class="nyan-pet"
-    :class="[stateClass, activityClass, `pointer-${pointerDirection}`, choreographyAction ? `pet-choreo-${choreographyAction}` : '', { petting: isPetting, 'drag-disabled': !draggable }]"
+    :class="[stateClass, activityClass, moodClass, `pointer-${pointerDirection}`, choreographyAction ? `pet-choreo-${choreographyAction}` : '', { petting: isPetting, 'drag-disabled': !draggable }]"
+    :style="petStyle"
     @mousemove="trackEyes"
     @mouseleave="resetEyes"
     @mousedown="startDrag"
     @click.stop="pet"
     @dblclick.stop="emit('menu')"
-    :title="titleText"
+    :title="draggable ? `${lifeTitle} · Click to pet • double-click for menu • drag to move` : 'NyanMate teaching companion'"
   >
     <div class="tail"><span class="tail-tip"></span></div>
     <div class="body">
@@ -116,17 +124,18 @@ onUnmounted(() => {
       <div class="whiskers whiskers-left"></div><div class="whiskers whiskers-right"></div>
       <div class="scarf-band"></div><div class="scarf-badge">✦</div>
       <div v-if="showThought" class="thought">•••</div>
-      <div v-if="displayState === 'coding'" class="headphones"><span></span></div>
-      <div v-if="displayState === 'coding'" class="laptop"><span>⌘</span></div>
-      <template v-if="displayState === 'teaching'">
+      <div v-if="state === 'coding'" class="headphones"><span></span></div>
+      <div v-if="state === 'coding'" class="laptop"><span>⌘</span></div>
+      <template v-if="state === 'teaching'">
         <div class="teacher-glasses"><span></span><span></span></div>
         <div class="graduation-cap"><i></i></div>
         <div class="teaching-pointer"></div>
       </template>
       <div v-if="showSparkles" class="sparkles">✦ ✧</div>
-      <div v-if="displayState === 'error'" class="alert">!</div>
-      <div v-if="displayState === 'sleeping'" class="sleep-z">Z z</div>
-      <div v-if="props.state === 'idle' && idleActivity === 'groom'" class="groom-mark">♡</div>
+      <div v-if="state === 'error'" class="alert">!</div>
+      <div v-if="state === 'sleeping' || idleActivity === 'doze'" class="sleep-z">Z z</div>
+      <div v-if="mood === 'playful' && autonomous" class="mood-heart">♥</div>
+      <div v-if="mood === 'curious' && autonomous" class="mood-mark">?</div>
     </div>
   </div>
 </template>

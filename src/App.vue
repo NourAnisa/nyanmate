@@ -9,9 +9,18 @@ import PdfPresentationStage from './components/PdfPresentationStage.vue'
 import PresenterNotes from './components/PresenterNotes.vue'
 import TeachingChoreography from './components/TeachingChoreography.vue'
 import LessonFlowEditor from './components/LessonFlowEditor.vue'
+import AssessmentEditor from './components/AssessmentEditor.vue'
+import AssessmentOverlay from './components/AssessmentOverlay.vue'
 import type { PreparedPdf, TeachingCue } from './services/pdfTeaching'
 import { buildPageChoreography, type ChoreographyAction, type ChoreographyStep } from './services/teachingChoreography'
 import { createDefaultLessonFlow, getLessonPagePlan, loadLessonFlow, type LessonFlowConfig } from './services/lessonFlow'
+import {
+  getPageAssessment,
+  loadAssessmentConfig,
+  saveSessionReport,
+  type AssessmentConfig,
+  type AssessmentResult,
+} from './services/assessment'
 import type { AgendaItem, PetState } from './types'
 
 const petState = ref<PetState>('idle')
@@ -28,6 +37,14 @@ const teachingTopic = ref('PDF Presentation')
 const preparedPdf = ref<PreparedPdf | null>(null)
 const lessonFlow = ref<LessonFlowConfig | null>(null)
 const lessonPageRemaining = ref(0)
+const assessmentConfig = ref<AssessmentConfig | null>(null)
+const assessmentOpen = ref(false)
+const assessmentRemaining = ref(0)
+const selectedOptionId = ref('')
+const assessmentRevealed = ref(false)
+const assessmentResults = ref<AssessmentResult[]>([])
+const sessionStartedAt = ref<string | null>(null)
+const visitedPages = ref<number[]>([])
 const presentationOpen = ref(false)
 const presenterNotesOpen = ref(false)
 const monitorNames = ref<string[]>([])
@@ -48,6 +65,7 @@ const builtInPresentation = computed(() => teachingActive.value && presentationO
 const nextAgenda = computed(() => agenda.value.find(item => new Date(item.startsAt).getTime() >= Date.now()))
 const currentTeachingCue = computed(() => preparedPdf.value?.cues[teachingPage.value - 1] ?? null)
 const currentLessonPlan = computed(() => getLessonPagePlan(lessonFlow.value, teachingPage.value))
+const currentAssessment = computed(() => getPageAssessment(assessmentConfig.value, teachingPage.value))
 const lessonTimeText = computed(() => `${String(Math.floor(lessonPageRemaining.value / 60)).padStart(2, '0')}:${String(lessonPageRemaining.value % 60).padStart(2, '0')}`)
 const currentChoreography = computed(() => {
   const cue = currentTeachingCue.value
@@ -80,13 +98,9 @@ function addAgenda() {
 
 function removeAgenda(id: string) { agenda.value = agenda.value.filter(item => item.id !== id); localStorage.setItem('nyanmate-agenda', JSON.stringify(agenda.value)) }
 function toggleFocus() { focusRunning.value = !focusRunning.value; speak(focusRunning.value ? 'Focus time! I’ll stay with you. 🍅' : 'Focus paused.', focusRunning.value ? 'coding' : 'idle') }
-
 function resetLessonPageTimer() { lessonPageRemaining.value = currentLessonPlan.value?.durationSec ?? 0 }
-
-function handleLessonFlowChange(flow: LessonFlowConfig) {
-  lessonFlow.value = flow
-  resetLessonPageTimer()
-}
+function handleLessonFlowChange(flow: LessonFlowConfig) { lessonFlow.value = flow; resetLessonPageTimer() }
+function handleAssessmentChange(config: AssessmentConfig) { assessmentConfig.value = config }
 
 function handlePdfPrepared(pdf: PreparedPdf) {
   preparedPdf.value = pdf
@@ -95,11 +109,12 @@ function handlePdfPrepared(pdf: PreparedPdf) {
   teachingPage.value = 1
   choreographyIndex.value = 0
   lessonFlow.value = loadLessonFlow(pdf.name) ?? createDefaultLessonFlow(pdf.name, pdf.cues, pdf.pageCount)
+  assessmentConfig.value = loadAssessmentConfig(pdf.name)
   resetLessonPageTimer()
-  bubble.value = `PDF ready: ${pdf.name} · ${pdf.pageCount} pages. Lesson flow + choreography ready. 🧭🎬`
+  bubble.value = `PDF ready: ${pdf.name} · ${pdf.pageCount} pages. Lesson flow + assessments ready. 🧭🧠`
 }
 
-function handlePreparedCue(cue: TeachingCue) { teachingPage.value = cue.page; choreographyIndex.value = 0; resetLessonPageTimer(); bubble.value = `Page ${cue.page}: ${cue.message}` }
+function handlePreparedCue(cue: TeachingCue) { teachingPage.value = cue.page; choreographyIndex.value = 0; assessmentOpen.value = false; resetLessonPageTimer(); bubble.value = `Page ${cue.page}: ${cue.message}` }
 
 async function detectMonitors() {
   try {
@@ -130,13 +145,15 @@ async function syncPresenterState() {
     choreographyAutoPlay: choreographyAutoPlay.value,
     lessonStage: currentLessonPlan.value?.stage ?? 'concept', lessonPageRemaining: lessonPageRemaining.value,
     lessonDuration: currentLessonPlan.value?.durationSec ?? 0, lessonDiscussion: currentLessonPlan.value?.discussionSec ?? 0,
+    assessmentActive: assessmentOpen.value, assessmentKind: currentAssessment.value?.kind ?? '', assessmentRemaining: assessmentRemaining.value,
+    assessmentQuestion: currentAssessment.value?.question ?? '', assessmentRevealed: assessmentRevealed.value,
   })
 }
 
 function clearChoreographyTimer() { if (choreographyTimer) { clearTimeout(choreographyTimer); choreographyTimer = undefined } }
 function scheduleChoreographyStep() {
   clearChoreographyTimer()
-  if (!choreographyAutoPlay.value || !teachingActive.value || currentLessonPlan.value?.autoAdvanceCue === false) return
+  if (!choreographyAutoPlay.value || !teachingActive.value || currentLessonPlan.value?.autoAdvanceCue === false || assessmentOpen.value) return
   const current = currentChoreographyStep.value
   if (!current || choreographyIndex.value >= choreographySteps.value.length - 1) return
   choreographyTimer = window.setTimeout(() => { void nextChoreographyStep() }, current.durationMs)
@@ -146,14 +163,75 @@ async function resetChoreography() { clearChoreographyTimer(); choreographyIndex
 async function nextChoreographyStep() { if (choreographyIndex.value >= choreographySteps.value.length - 1) return; choreographyIndex.value += 1; await applyChoreographyStep() }
 async function previousChoreographyStep() { if (choreographyIndex.value <= 0) return; choreographyIndex.value -= 1; await applyChoreographyStep() }
 async function toggleChoreographyAutoPlay() { choreographyAutoPlay.value = !choreographyAutoPlay.value; await syncPresenterState(); if (choreographyAutoPlay.value) scheduleChoreographyStep(); else clearChoreographyTimer() }
+
+async function startAssessment() {
+  const assessment = currentAssessment.value
+  if (!assessment) { bubble.value = 'No assessment is configured for this page.'; return }
+  clearChoreographyTimer()
+  assessmentOpen.value = true
+  assessmentRemaining.value = assessment.countdownSec
+  selectedOptionId.value = ''
+  assessmentRevealed.value = false
+  choreographyAction.value = assessment.kind === 'practice' ? 'point' : 'think'
+  bubble.value = assessment.kind === 'practice' ? 'Practice checkpoint! Follow the task on screen. 🛠️' : 'Quiz time! Choose the best answer. 🧠'
+  await syncPresenterState()
+}
+
+function selectAssessment(id: string) { if (!assessmentRevealed.value) selectedOptionId.value = id }
+
+async function revealAssessment() {
+  const assessment = currentAssessment.value
+  if (!assessment) return
+  assessmentRevealed.value = true
+  const existing = assessmentResults.value.find(item => item.page === teachingPage.value)
+  const result: AssessmentResult = {
+    page: teachingPage.value,
+    kind: assessment.kind,
+    selectedOptionId: selectedOptionId.value || undefined,
+    correct: selectedOptionId.value ? selectedOptionId.value === assessment.correctOptionId : undefined,
+    revealed: true,
+    answeredAt: new Date().toISOString(),
+  }
+  if (existing) Object.assign(existing, result); else assessmentResults.value.push(result)
+  bubble.value = result.correct === true ? 'Correct! Great job! 🎉' : result.correct === false ? 'Let’s review why the highlighted answer is correct. 💡' : 'Answer revealed — let’s discuss it together. 💡'
+  choreographyAction.value = result.correct === true ? 'celebrate' : 'explain'
+  await syncPresenterState()
+}
+
+async function closeAssessment() {
+  assessmentOpen.value = false
+  assessmentRemaining.value = 0
+  if (!assessmentRevealed.value && currentAssessment.value) {
+    assessmentResults.value.push({ page: teachingPage.value, kind: currentAssessment.value.kind, selectedOptionId: selectedOptionId.value || undefined, revealed: false })
+  }
+  await syncPresenterState()
+  scheduleChoreographyStep()
+}
+
 async function setFullscreen(value: boolean) { try { await getCurrentWindow().setFullscreen(value) } catch { /* Browser preview */ } }
+
+function recordVisitedPage() {
+  if (!visitedPages.value.includes(teachingPage.value)) visitedPages.value.push(teachingPage.value)
+}
 
 async function teachingMode() {
   if (teachingActive.value) {
-    clearChoreographyTimer(); presentationOpen.value = false; presenterNotesOpen.value = false; await setPresenterWindowVisible(false); await setFullscreen(false)
-    speak('Class finished. Nice teaching! 🎓', 'success', true); choreographyAction.value = 'celebrate'; await syncPresenterState()
+    clearChoreographyTimer(); assessmentOpen.value = false; presentationOpen.value = false; presenterNotesOpen.value = false; await setPresenterWindowVisible(false); await setFullscreen(false)
+    const finishedAt = new Date().toISOString()
+    if (preparedPdf.value && sessionStartedAt.value) {
+      saveSessionReport({
+        pdfName: preparedPdf.value.name,
+        startedAt: sessionStartedAt.value,
+        finishedAt,
+        durationSec: Math.max(0, Math.round((new Date(finishedAt).getTime() - new Date(sessionStartedAt.value).getTime()) / 1000)),
+        pagesVisited: [...visitedPages.value].sort((a, b) => a - b),
+        assessments: assessmentResults.value,
+      })
+    }
+    speak('Class finished. Session report saved locally. 🎓📊', 'success', true); choreographyAction.value = 'celebrate'; await syncPresenterState()
   } else {
     teachingPage.value = 1; petState.value = 'teaching'; presentationOpen.value = Boolean(preparedPdf.value); resetLessonPageTimer()
+    sessionStartedAt.value = new Date().toISOString(); visitedPages.value = [1]; assessmentResults.value = []
     if (presentationOpen.value) { await detectMonitors(); await movePresentationToSelectedMonitor(); await setFullscreen(true); if (dualMonitorMode.value && dualMonitorAvailable.value) await setPresenterWindowVisible(true) }
     if (currentTeachingCue.value) await resetChoreography(); else bubble.value = `Teaching mode ready: ${teachingTopic.value}. 🎓`
     await syncPresenterState()
@@ -162,7 +240,8 @@ async function teachingMode() {
 }
 
 async function changeTeachingPage(delta: number) {
-  teachingPage.value = Math.max(1, Math.min(teachingPages.value, teachingPage.value + delta)); resetLessonPageTimer(); await resetChoreography()
+  if (assessmentOpen.value) await closeAssessment()
+  teachingPage.value = Math.max(1, Math.min(teachingPages.value, teachingPage.value + delta)); recordVisitedPage(); resetLessonPageTimer(); await resetChoreography()
   if (!currentChoreographyStep.value) { const cue = currentTeachingCue.value; bubble.value = cue ? `Page ${teachingPage.value}/${teachingPages.value}: ${cue.message}` : `Page ${teachingPage.value}/${teachingPages.value}: Continue explaining the main idea.`; await syncPresenterState() }
 }
 
@@ -177,7 +256,13 @@ function checkAgenda() {
 
 function handleKey(event: KeyboardEvent) {
   if (!teachingActive.value) return
-  if (event.key === 'Escape') { void teachingMode(); return }
+  if (event.key === 'Escape') { if (assessmentOpen.value) void closeAssessment(); else void teachingMode(); return }
+  if (event.key.toLowerCase() === 'e') { if (assessmentOpen.value) void closeAssessment(); else void startAssessment(); return }
+  if (assessmentOpen.value) {
+    if (['1','2','3','4'].includes(event.key)) selectAssessment(['a','b','c','d'][Number(event.key) - 1])
+    if (event.key.toLowerCase() === 'r') void revealAssessment()
+    return
+  }
   if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') { event.preventDefault(); void changeTeachingPage(1) }
   if (event.key === 'ArrowLeft' || event.key === 'PageUp') { event.preventDefault(); void changeTeachingPage(-1) }
   if (event.key.toLowerCase() === 'q') void askClass(); if (event.key.toLowerCase() === 'd') void startDiscussion(); if (event.key.toLowerCase() === 'n') presenterNotesOpen.value = !presenterNotesOpen.value
@@ -189,6 +274,7 @@ onMounted(async () => {
   unlistenControl = await listen<{ action: string }>('presenter-control', (event) => {
     const action = event.payload.action
     if (action === 'prev') void changeTeachingPage(-1); if (action === 'next') void changeTeachingPage(1); if (action === 'question') void askClass(); if (action === 'discussion') void startDiscussion()
+    if (action === 'assessment') void startAssessment(); if (action === 'reveal') void revealAssessment(); if (action === 'assessment-close') void closeAssessment()
     if (action === 'cue-prev') void previousChoreographyStep(); if (action === 'cue-next') void nextChoreographyStep(); if (action === 'auto') void toggleChoreographyAutoPlay(); if (action === 'end') void teachingMode()
   })
   unlistenReady = await listen('presenter-ready', () => { void syncPresenterState() })
@@ -197,6 +283,11 @@ onMounted(async () => {
     if (focusRunning.value && focusSeconds.value > 0) focusSeconds.value--
     if (focusRunning.value && focusSeconds.value === 0) { focusRunning.value = false; focusSeconds.value = 25 * 60; speak('Focus session complete! Great work! 🎉', 'success', true) }
     if (teachingActive.value && lessonPageRemaining.value > 0) { lessonPageRemaining.value--; if (lessonPageRemaining.value % 5 === 0) void syncPresenterState() }
+    if (assessmentOpen.value && assessmentRemaining.value > 0) {
+      assessmentRemaining.value--
+      if (assessmentRemaining.value === 0) { bubble.value = 'Time is up — reveal and discuss the answer. ⏰'; void syncPresenterState() }
+      else if (assessmentRemaining.value % 5 === 0) void syncPresenterState()
+    }
   }, 1000)
 })
 
@@ -214,20 +305,22 @@ onUnmounted(() => { window.removeEventListener('keydown', handleKey); unlistenCo
         <button v-if="!dualMonitorAvailable || !dualMonitorMode" @click="presenterNotesOpen=!presenterNotesOpen">Notes · N</button><button @click="teachingMode">End · Esc</button>
       </div>
       <PresenterNotes v-if="presenterNotesOpen && (!dualMonitorAvailable || !dualMonitorMode)" :cue="currentTeachingCue" :page="teachingPage" :total="teachingPages" />
-      <div class="presentation-nav"><button :disabled="teachingPage <= 1" @click="changeTeachingPage(-1)">←</button><button @click="askClass">❓</button><button @click="startDiscussion">💬</button><button :disabled="teachingPage >= teachingPages" @click="changeTeachingPage(1)">→</button></div>
-      <TeachingChoreography v-if="choreographySteps.length" :steps="choreographySteps" :index="choreographyIndex" :auto-play="choreographyAutoPlay" @previous="previousChoreographyStep" @next="nextChoreographyStep" @toggle-auto="toggleChoreographyAutoPlay" />
+      <div class="presentation-nav"><button :disabled="teachingPage <= 1" @click="changeTeachingPage(-1)">←</button><button @click="askClass">❓</button><button @click="startDiscussion">💬</button><button v-if="currentAssessment" @click="startAssessment">🧠</button><button :disabled="teachingPage >= teachingPages" @click="changeTeachingPage(1)">→</button></div>
+      <AssessmentOverlay v-if="assessmentOpen && currentAssessment" :assessment="currentAssessment" :remaining="assessmentRemaining" :selected-option-id="selectedOptionId" :revealed="assessmentRevealed" @select="selectAssessment" @reveal="revealAssessment" @close="closeAssessment" />
+      <TeachingChoreography v-if="choreographySteps.length && !assessmentOpen" :steps="choreographySteps" :index="choreographyIndex" :auto-play="choreographyAutoPlay" @previous="previousChoreographyStep" @next="nextChoreographyStep" @toggle-auto="toggleChoreographyAutoPlay" />
       <div class="teaching-pet-overlay" :class="[petSide, `choreo-${choreographyAction}`]"><div class="presentation-bubble">{{ bubble }}</div><NyanPet :state="petState" :draggable="false" :pointer-direction="pointerDirection" @pet="petNyan" /></div>
     </template>
 
     <template v-else>
       <section v-if="menuOpen" class="panel">
-        <header><strong>NyanMate v0.9</strong><button @click="menuOpen=false">×</button></header>
+        <header><strong>NyanMate v0.10</strong><button @click="menuOpen=false">×</button></header>
         <PdfTeachingPanel @prepared="handlePdfPrepared" @cue="handlePreparedCue" />
         <LessonFlowEditor :pdf="preparedPdf" @change="handleLessonFlowChange" />
+        <AssessmentEditor :pdf="preparedPdf" @change="handleAssessmentChange" />
         <div class="section dual-monitor-setup"><h3>🖥️ Presenter display</h3><label class="dual-toggle"><input v-model="dualMonitorMode" type="checkbox" /> Use private presenter console when two displays are available</label><select v-if="monitorNames.length > 1" v-model.number="projectorMonitorIndex"><option v-for="(name, index) in monitorNames" :key="name + index" :value="index">Projector: {{ name }}</option></select><small>{{ dualMonitorAvailable ? `${monitorNames.length} displays detected. Presenter Console will remain separate from the projected PDF.` : 'One display detected. NyanMate will use same-screen presenter notes.' }}</small></div>
         <div class="section teaching-setup"><h3>🎬 Teaching choreography</h3><label class="dual-toggle"><input v-model="choreographyAutoPlay" type="checkbox" /> Auto-play gestures and teaching cues on enabled pages</label><small>`[` previous cue · `]` next cue · `A` auto-play on/off.</small></div>
         <div class="section"><h3>📅 Quick agenda</h3><input v-model="newTitle" placeholder="Agenda title" /><input v-model="newTime" type="datetime-local" /><button class="primary" @click="addAgenda">Add agenda</button><div v-if="agenda.length" class="agenda-list"><div v-for="item in agenda.slice(0, 3)" :key="item.id" class="agenda-row"><span>{{ item.title }}<small>{{ new Date(item.startsAt).toLocaleString() }}</small></span><button @click="removeAgenda(item.id)">×</button></div></div></div>
-        <div class="section teaching-setup"><h3>🎓 Teaching companion</h3><input v-model="teachingTopic" placeholder="Presentation/PDF title" /><div class="page-config"><span>Pages</span><input v-model.number="teachingPages" type="number" min="1" max="999" /></div><small v-if="preparedPdf" class="prepared-note">✓ Lesson flow + semantic targets + presenter console + choreography ready.</small></div>
+        <div class="section teaching-setup"><h3>🎓 Teaching companion</h3><input v-model="teachingTopic" placeholder="Presentation/PDF title" /><div class="page-config"><span>Pages</span><input v-model.number="teachingPages" type="number" min="1" max="999" /></div><small v-if="preparedPdf" class="prepared-note">✓ Lesson flow + assessments + semantic targets + presenter console ready.</small></div>
         <div class="actions"><button @click="teachingMode">🎓 {{ preparedPdf ? 'Present PDF' : 'Start teaching' }}</button><button @click="speak('Thinking with your AI agent…', 'thinking')">🤖 Agent demo</button><button @click="speak('Build completed successfully!', 'success', true)">✓ Success demo</button><button @click="speak('Oops — something needs attention.', 'error', true)">⚠ Error demo</button></div>
       </section>
       <div v-if="teachingActive" class="teaching-hud"><strong>🎓 {{ teachingTopic }}</strong><span>Page {{ teachingPage }} / {{ teachingPages }}</span><div><button @click="changeTeachingPage(-1)">←</button><button @click="askClass">❓</button><button @click="startDiscussion">💬</button><button @click="changeTeachingPage(1)">→</button><button @click="teachingMode">End</button></div></div>

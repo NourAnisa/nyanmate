@@ -70,14 +70,19 @@ pub fn run() {
         .setup(|app| {
             start_global_input_bridge(app.handle().clone());
             let show = MenuItem::with_id(app, "show", "Show NyanMate", true, None::<&str>)?;
+            let settings = MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
             let assistant = MenuItem::with_id(app, "assistant", "Drop-a-File Assistant", true, None::<&str>)?;
             let agenda = MenuItem::with_id(app, "agenda", "Smart Agenda", true, None::<&str>)?;
             let reports = MenuItem::with_id(app, "reports", "Class Reports", true, None::<&str>)?;
             let hide = MenuItem::with_id(app, "hide", "Hide NyanMate", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &assistant, &agenda, &reports, &hide, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &settings, &assistant, &agenda, &reports, &hide, &quit])?;
             let mut tray = TrayIconBuilder::new().tooltip("NyanMate").menu(&menu).on_menu_event(|app, event| match event.id.as_ref() {
                 "show" => { let _ = set_window_visible(app, "main", true); }
+                "settings" => {
+                    let _ = set_window_visible(app, "main", true);
+                    let _ = app.emit_to("main", "open-pet-settings", ());
+                }
                 "assistant" => { let _ = set_window_visible(app, "assistant", true); }
                 "agenda" => { let _ = set_window_visible(app, "agenda", true); }
                 "reports" => { let _ = set_window_visible(app, "reports", true); }

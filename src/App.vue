@@ -20,6 +20,8 @@ import {
   saveSessionReport,
   type AssessmentConfig,
   type AssessmentResult,
+  type PageTiming,
+  type StageTiming,
 } from './services/assessment'
 import type { AgendaItem, PetState } from './types'
 
@@ -45,6 +47,7 @@ const assessmentRevealed = ref(false)
 const assessmentResults = ref<AssessmentResult[]>([])
 const sessionStartedAt = ref<string | null>(null)
 const visitedPages = ref<number[]>([])
+const pageTimingMap = ref<Record<number, PageTiming>>({})
 const presentationOpen = ref(false)
 const presenterNotesOpen = ref(false)
 const monitorNames = ref<string[]>([])
@@ -212,6 +215,31 @@ async function setFullscreen(value: boolean) { try { await getCurrentWindow().se
 
 function recordVisitedPage() {
   if (!visitedPages.value.includes(teachingPage.value)) visitedPages.value.push(teachingPage.value)
+  const stage = currentLessonPlan.value?.stage ?? 'concept'
+  const existing = pageTimingMap.value[teachingPage.value]
+  if (existing) {
+    existing.visits += 1
+    existing.stage = stage
+  } else {
+    pageTimingMap.value[teachingPage.value] = { page: teachingPage.value, stage, seconds: 0, visits: 1 }
+  }
+}
+
+function recordTeachingSecond() {
+  const stage = currentLessonPlan.value?.stage ?? 'concept'
+  const existing = pageTimingMap.value[teachingPage.value]
+  if (existing) {
+    existing.seconds += 1
+    existing.stage = stage
+  } else {
+    pageTimingMap.value[teachingPage.value] = { page: teachingPage.value, stage, seconds: 1, visits: 1 }
+  }
+}
+
+function currentStageTimings(): StageTiming[] {
+  const stageMap = new Map<string, number>()
+  Object.values(pageTimingMap.value).forEach(item => stageMap.set(item.stage, (stageMap.get(item.stage) ?? 0) + item.seconds))
+  return [...stageMap.entries()].map(([stage, seconds]) => ({ stage, seconds })).sort((a, b) => b.seconds - a.seconds)
 }
 
 async function teachingMode() {
@@ -226,12 +254,14 @@ async function teachingMode() {
         durationSec: Math.max(0, Math.round((new Date(finishedAt).getTime() - new Date(sessionStartedAt.value).getTime()) / 1000)),
         pagesVisited: [...visitedPages.value].sort((a, b) => a - b),
         assessments: assessmentResults.value,
+        pageTimings: Object.values(pageTimingMap.value).sort((a, b) => a.page - b.page),
+        stageTimings: currentStageTimings(),
       })
     }
-    speak('Class finished. Session report saved locally. 🎓📊', 'success', true); choreographyAction.value = 'celebrate'; await syncPresenterState()
+    speak('Class finished. Session report + teaching analytics saved locally. 🎓📊', 'success', true); choreographyAction.value = 'celebrate'; await syncPresenterState()
   } else {
     teachingPage.value = 1; petState.value = 'teaching'; presentationOpen.value = Boolean(preparedPdf.value); resetLessonPageTimer()
-    sessionStartedAt.value = new Date().toISOString(); visitedPages.value = [1]; assessmentResults.value = []
+    sessionStartedAt.value = new Date().toISOString(); visitedPages.value = []; assessmentResults.value = []; pageTimingMap.value = {}; recordVisitedPage()
     if (presentationOpen.value) { await detectMonitors(); await movePresentationToSelectedMonitor(); await setFullscreen(true); if (dualMonitorMode.value && dualMonitorAvailable.value) await setPresenterWindowVisible(true) }
     if (currentTeachingCue.value) await resetChoreography(); else bubble.value = `Teaching mode ready: ${teachingTopic.value}. 🎓`
     await syncPresenterState()
@@ -241,7 +271,10 @@ async function teachingMode() {
 
 async function changeTeachingPage(delta: number) {
   if (assessmentOpen.value) await closeAssessment()
-  teachingPage.value = Math.max(1, Math.min(teachingPages.value, teachingPage.value + delta)); recordVisitedPage(); resetLessonPageTimer(); await resetChoreography()
+  const previousPage = teachingPage.value
+  teachingPage.value = Math.max(1, Math.min(teachingPages.value, teachingPage.value + delta))
+  if (teachingPage.value !== previousPage) recordVisitedPage()
+  resetLessonPageTimer(); await resetChoreography()
   if (!currentChoreographyStep.value) { const cue = currentTeachingCue.value; bubble.value = cue ? `Page ${teachingPage.value}/${teachingPages.value}: ${cue.message}` : `Page ${teachingPage.value}/${teachingPages.value}: Continue explaining the main idea.`; await syncPresenterState() }
 }
 
@@ -282,6 +315,7 @@ onMounted(async () => {
     checkAgenda()
     if (focusRunning.value && focusSeconds.value > 0) focusSeconds.value--
     if (focusRunning.value && focusSeconds.value === 0) { focusRunning.value = false; focusSeconds.value = 25 * 60; speak('Focus session complete! Great work! 🎉', 'success', true) }
+    if (teachingActive.value) recordTeachingSecond()
     if (teachingActive.value && lessonPageRemaining.value > 0) { lessonPageRemaining.value--; if (lessonPageRemaining.value % 5 === 0) void syncPresenterState() }
     if (assessmentOpen.value && assessmentRemaining.value > 0) {
       assessmentRemaining.value--
@@ -313,14 +347,14 @@ onUnmounted(() => { window.removeEventListener('keydown', handleKey); unlistenCo
 
     <template v-else>
       <section v-if="menuOpen" class="panel">
-        <header><strong>NyanMate v0.10</strong><button @click="menuOpen=false">×</button></header>
+        <header><strong>NyanMate v0.12</strong><button @click="menuOpen=false">×</button></header>
         <PdfTeachingPanel @prepared="handlePdfPrepared" @cue="handlePreparedCue" />
         <LessonFlowEditor :pdf="preparedPdf" @change="handleLessonFlowChange" />
         <AssessmentEditor :pdf="preparedPdf" @change="handleAssessmentChange" />
         <div class="section dual-monitor-setup"><h3>🖥️ Presenter display</h3><label class="dual-toggle"><input v-model="dualMonitorMode" type="checkbox" /> Use private presenter console when two displays are available</label><select v-if="monitorNames.length > 1" v-model.number="projectorMonitorIndex"><option v-for="(name, index) in monitorNames" :key="name + index" :value="index">Projector: {{ name }}</option></select><small>{{ dualMonitorAvailable ? `${monitorNames.length} displays detected. Presenter Console will remain separate from the projected PDF.` : 'One display detected. NyanMate will use same-screen presenter notes.' }}</small></div>
         <div class="section teaching-setup"><h3>🎬 Teaching choreography</h3><label class="dual-toggle"><input v-model="choreographyAutoPlay" type="checkbox" /> Auto-play gestures and teaching cues on enabled pages</label><small>`[` previous cue · `]` next cue · `A` auto-play on/off.</small></div>
         <div class="section"><h3>📅 Quick agenda</h3><input v-model="newTitle" placeholder="Agenda title" /><input v-model="newTime" type="datetime-local" /><button class="primary" @click="addAgenda">Add agenda</button><div v-if="agenda.length" class="agenda-list"><div v-for="item in agenda.slice(0, 3)" :key="item.id" class="agenda-row"><span>{{ item.title }}<small>{{ new Date(item.startsAt).toLocaleString() }}</small></span><button @click="removeAgenda(item.id)">×</button></div></div></div>
-        <div class="section teaching-setup"><h3>🎓 Teaching companion</h3><input v-model="teachingTopic" placeholder="Presentation/PDF title" /><div class="page-config"><span>Pages</span><input v-model.number="teachingPages" type="number" min="1" max="999" /></div><small v-if="preparedPdf" class="prepared-note">✓ Lesson flow + assessments + semantic targets + presenter console ready.</small></div>
+        <div class="section teaching-setup"><h3>🎓 Teaching companion</h3><input v-model="teachingTopic" placeholder="Presentation/PDF title" /><div class="page-config"><span>Pages</span><input v-model.number="teachingPages" type="number" min="1" max="999" /></div><small v-if="preparedPdf" class="prepared-note">✓ Lesson flow + assessments + teaching analytics + semantic targets ready.</small></div>
         <div class="actions"><button @click="teachingMode">🎓 {{ preparedPdf ? 'Present PDF' : 'Start teaching' }}</button><button @click="speak('Thinking with your AI agent…', 'thinking')">🤖 Agent demo</button><button @click="speak('Build completed successfully!', 'success', true)">✓ Success demo</button><button @click="speak('Oops — something needs attention.', 'error', true)">⚠ Error demo</button></div>
       </section>
       <div v-if="teachingActive" class="teaching-hud"><strong>🎓 {{ teachingTopic }}</strong><span>Page {{ teachingPage }} / {{ teachingPages }}</span><div><button @click="changeTeachingPage(-1)">←</button><button @click="askClass">❓</button><button @click="startDiscussion">💬</button><button @click="changeTeachingPage(1)">→</button><button @click="teachingMode">End</button></div></div>

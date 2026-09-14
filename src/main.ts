@@ -28,6 +28,7 @@ import './v22.css'
 import './v23.css'
 import './v24.css'
 import './v25.css'
+import './v26.css'
 
 const label = getCurrentWindow().label
 const Root = label === 'presenter'

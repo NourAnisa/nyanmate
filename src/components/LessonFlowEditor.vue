@@ -16,6 +16,13 @@ import {
   buildLessonRebalanceSuggestions,
   type LessonRebalanceSuggestion,
 } from '../services/lessonRebalancer'
+import {
+  applyTeachingTemplate,
+  getTeachingTemplate,
+  teachingTemplates,
+  type AppliedTemplateSummary,
+  type TeachingTemplateId,
+} from '../services/teachingTemplates'
 
 const props = defineProps<{ pdf: PreparedPdf | null }>()
 const emit = defineEmits<{ (e: 'change', flow: LessonFlowConfig): void }>()
@@ -23,11 +30,16 @@ const emit = defineEmits<{ (e: 'change', flow: LessonFlowConfig): void }>()
 const flow = ref<LessonFlowConfig | null>(null)
 const selectedPage = ref(1)
 const rebalanceOpen = ref(false)
+const templateOpen = ref(false)
+const selectedTemplateId = ref<TeachingTemplateId>('theory')
+const classMinutes = ref(100)
+const appliedTemplateSummary = ref<AppliedTemplateSummary | null>(null)
 const stages = Object.keys(lessonStageLabels) as LessonStage[]
 const selectedPlan = computed(() => flow.value?.pages.find(item => item.page === selectedPage.value) ?? null)
 const reports = computed(() => props.pdf ? loadReportHistory(props.pdf.name) : [])
 const rebalanceSuggestions = computed(() => buildLessonRebalanceSuggestions(flow.value, reports.value))
 const selectedSuggestion = computed(() => rebalanceSuggestions.value.find(item => item.page === selectedPage.value) ?? null)
+const selectedTemplate = computed(() => getTeachingTemplate(selectedTemplateId.value))
 const durationText = (seconds: number) => seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 
 function load() {
@@ -37,6 +49,7 @@ function load() {
   }
   flow.value = loadLessonFlow(props.pdf.name) ?? createDefaultLessonFlow(props.pdf.name, props.pdf.cues, props.pdf.pageCount)
   selectedPage.value = Math.min(selectedPage.value, props.pdf.pageCount)
+  appliedTemplateSummary.value = null
   emit('change', flow.value)
 }
 
@@ -50,6 +63,20 @@ function resetFlow() {
   if (!props.pdf) return
   flow.value = createDefaultLessonFlow(props.pdf.name, props.pdf.cues, props.pdf.pageCount)
   selectedPage.value = 1
+  appliedTemplateSummary.value = null
+  persist()
+}
+
+function selectTemplate(id: TeachingTemplateId) {
+  selectedTemplateId.value = id
+  classMinutes.value = getTeachingTemplate(id).defaultMinutes
+}
+
+function applyTemplate() {
+  if (!flow.value) return
+  const result = applyTeachingTemplate(flow.value, selectedTemplate.value, classMinutes.value)
+  flow.value = result.flow
+  appliedTemplateSummary.value = result.summary
   persist()
 }
 
@@ -76,6 +103,34 @@ watch(() => props.pdf?.name, load, { immediate: true })
         <small>Atur peran setiap halaman sebelum mengajar.</small>
       </div>
       <button @click="resetFlow">Reset</button>
+    </div>
+
+    <div class="teaching-template-panel">
+      <div class="teaching-template-head">
+        <div><strong>🗂️ Teaching Templates</strong><small>Terapkan pola kelas reusable ke seluruh Lesson Flow.</small></div>
+        <button @click="templateOpen = !templateOpen">{{ templateOpen ? 'Hide' : 'Choose template' }}</button>
+      </div>
+      <div v-if="templateOpen" class="teaching-template-body">
+        <div class="teaching-template-grid">
+          <button v-for="item in teachingTemplates" :key="item.id" :class="{ active: selectedTemplateId === item.id }" @click="selectTemplate(item.id)">
+            <strong>{{ item.name }}</strong>
+            <small>{{ item.defaultMinutes }} menit default</small>
+            <span>{{ item.description }}</span>
+          </button>
+        </div>
+        <div class="teaching-template-apply">
+          <label>Durasi kelas (menit)<input v-model.number="classMinutes" type="number" min="10" max="360" /></label>
+          <div class="template-stage-preview">
+            <span v-for="item in selectedTemplate.stages" :key="item.stage"><b>{{ lessonStageLabels[item.stage] }}</b> {{ item.percent }}%</span>
+          </div>
+          <button class="template-apply-button" @click="applyTemplate">Apply {{ selectedTemplate.name }}</button>
+        </div>
+        <div v-if="appliedTemplateSummary" class="template-applied-summary">
+          <strong>✓ Template diterapkan untuk {{ appliedTemplateSummary.totalMinutes }} menit</strong>
+          <span v-for="item in appliedTemplateSummary.stageSeconds" :key="item.stage">{{ lessonStageLabels[item.stage] }} · {{ durationText(item.seconds) }} · {{ item.pages }} page</span>
+          <small>Catatan dosen per halaman tetap dipertahankan. Stage, target waktu, discussion time, dan auto choreography disusun ulang oleh template.</small>
+        </div>
+      </div>
     </div>
 
     <div v-if="reports.length" class="lesson-rebalancer">

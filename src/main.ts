@@ -4,6 +4,7 @@ import App from './App.vue'
 import PresenterView from './components/PresenterView.vue'
 import ClassReportDashboard from './components/ClassReportDashboard.vue'
 import SmartAgendaDashboard from './components/SmartAgendaDashboard.vue'
+import FileAssistantDashboard from './components/FileAssistantDashboard.vue'
 import './style.css'
 import './presentation.css'
 import './v05.css'
@@ -25,7 +26,16 @@ import './v20.css'
 import './v21.css'
 import './v22.css'
 import './v23.css'
+import './v24.css'
 
 const label = getCurrentWindow().label
-const Root = label === 'presenter' ? PresenterView : label === 'reports' ? ClassReportDashboard : label === 'agenda' ? SmartAgendaDashboard : App
+const Root = label === 'presenter'
+  ? PresenterView
+  : label === 'reports'
+    ? ClassReportDashboard
+    : label === 'agenda'
+      ? SmartAgendaDashboard
+      : label === 'assistant'
+        ? FileAssistantDashboard
+        : App
 createApp(Root).mount('#app')

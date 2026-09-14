@@ -7,13 +7,16 @@ const props = withDefaults(defineProps<{
   state: PetState
   draggable?: boolean
   pointerDirection?: 'left' | 'right'
-}>(), { draggable: true, pointerDirection: 'right' })
+  choreographyAction?: string
+}>(), { draggable: true, pointerDirection: 'right', choreographyAction: '' })
 const emit = defineEmits<{ (e: 'pet'): void; (e: 'menu'): void }>()
 
 const eyeX = ref(0)
 const eyeY = ref(0)
 const isPetting = ref(false)
 const stateClass = computed(() => `state-${props.state}`)
+const showThought = computed(() => props.state === 'thinking' || props.choreographyAction === 'think')
+const showSparkles = computed(() => props.state === 'success' || props.choreographyAction === 'celebrate')
 
 function trackEyes(event: MouseEvent) {
   const el = event.currentTarget as HTMLElement
@@ -41,7 +44,7 @@ function pet() {
 <template>
   <div
     class="nyan-pet"
-    :class="[stateClass, `pointer-${pointerDirection}`, { petting: isPetting, 'drag-disabled': !draggable }]"
+    :class="[stateClass, `pointer-${pointerDirection}`, choreographyAction ? `pet-choreo-${choreographyAction}` : '', { petting: isPetting, 'drag-disabled': !draggable }]"
     @mousemove="trackEyes"
     @mouseleave="resetEyes"
     @mousedown="startDrag"
@@ -64,7 +67,7 @@ function pet() {
       <div class="nose"></div><div class="mouth"></div>
       <div class="whiskers whiskers-left"></div><div class="whiskers whiskers-right"></div>
       <div class="scarf-band"></div><div class="scarf-badge">✦</div>
-      <div v-if="state === 'thinking'" class="thought">•••</div>
+      <div v-if="showThought" class="thought">•••</div>
       <div v-if="state === 'coding'" class="headphones"><span></span></div>
       <div v-if="state === 'coding'" class="laptop"><span>⌘</span></div>
       <template v-if="state === 'teaching'">
@@ -72,7 +75,7 @@ function pet() {
         <div class="graduation-cap"><i></i></div>
         <div class="teaching-pointer"></div>
       </template>
-      <div v-if="state === 'success'" class="sparkles">✦ ✧</div>
+      <div v-if="showSparkles" class="sparkles">✦ ✧</div>
       <div v-if="state === 'error'" class="alert">!</div>
       <div v-if="state === 'sleeping'" class="sleep-z">Z z</div>
     </div>

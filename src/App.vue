@@ -7,7 +7,13 @@ import NyanPet from './components/NyanPet.vue'
 import PdfTeachingPanel from './components/PdfTeachingPanel.vue'
 import PdfPresentationStage from './components/PdfPresentationStage.vue'
 import PresenterNotes from './components/PresenterNotes.vue'
+import TeachingChoreography from './components/TeachingChoreography.vue'
 import type { PreparedPdf, TeachingCue } from './services/pdfTeaching'
+import {
+  buildPageChoreography,
+  type ChoreographyAction,
+  type ChoreographyStep,
+} from './services/teachingChoreography'
 import type { AgendaItem, PetState } from './types'
 
 const petState = ref<PetState>('idle')
@@ -27,8 +33,12 @@ const presenterNotesOpen = ref(false)
 const monitorNames = ref<string[]>([])
 const projectorMonitorIndex = ref(1)
 const dualMonitorMode = ref(true)
+const choreographyIndex = ref(0)
+const choreographyAutoPlay = ref(true)
+const choreographyAction = ref<ChoreographyAction>('explain')
 let timer: number | undefined
 let bubbleReset: number | undefined
+let choreographyTimer: number | undefined
 let unlistenControl: UnlistenFn | undefined
 let unlistenReady: UnlistenFn | undefined
 
@@ -37,6 +47,12 @@ const teachingActive = computed(() => petState.value === 'teaching')
 const builtInPresentation = computed(() => teachingActive.value && presentationOpen.value && preparedPdf.value !== null)
 const nextAgenda = computed(() => agenda.value.find(item => new Date(item.startsAt).getTime() >= Date.now()))
 const currentTeachingCue = computed(() => preparedPdf.value?.cues[teachingPage.value - 1] ?? null)
+const currentChoreography = computed(() => {
+  const cue = currentTeachingCue.value
+  return cue ? buildPageChoreography(cue, teachingPages.value) : { page: teachingPage.value, steps: [] }
+})
+const choreographySteps = computed(() => currentChoreography.value.steps)
+const currentChoreographyStep = computed<ChoreographyStep | null>(() => choreographySteps.value[choreographyIndex.value] ?? null)
 const petSide = computed(() => currentTeachingCue.value?.safeSide === 'right' ? 'pet-right' : 'pet-left')
 const pointerDirection = computed(() => petSide.value === 'pet-right' ? 'left' : 'right')
 const pointStyle = computed(() => ({
@@ -86,11 +102,13 @@ function handlePdfPrepared(pdf: PreparedPdf) {
   teachingTopic.value = pdf.name
   teachingPages.value = pdf.pageCount
   teachingPage.value = 1
-  bubble.value = `PDF ready: ${pdf.name} · ${pdf.pageCount} pages. Safe zones and teaching cues prepared. 📄✨`
+  choreographyIndex.value = 0
+  bubble.value = `PDF ready: ${pdf.name} · ${pdf.pageCount} pages. Teaching choreography is ready. 🎬📄`
 }
 
 function handlePreparedCue(cue: TeachingCue) {
   teachingPage.value = cue.page
+  choreographyIndex.value = 0
   bubble.value = `Page ${cue.page}: ${cue.message}`
 }
 
@@ -131,6 +149,7 @@ function presenterNotesText() {
 
 async function syncPresenterState() {
   const cue = currentTeachingCue.value
+  const choreo = currentChoreographyStep.value
   await emit('presenter-state', {
     active: builtInPresentation.value,
     topic: teachingTopic.value,
@@ -140,7 +159,64 @@ async function syncPresenterState() {
     cueMessage: cue?.message ?? bubble.value,
     textPreview: cue?.textPreview ?? '',
     notes: presenterNotesText(),
+    choreographyLabel: choreo?.label ?? 'Manual teaching',
+    choreographyAction: choreographyAction.value,
+    choreographyIndex: choreographySteps.value.length ? choreographyIndex.value + 1 : 0,
+    choreographyTotal: choreographySteps.value.length,
+    choreographyAutoPlay: choreographyAutoPlay.value,
   })
+}
+
+function clearChoreographyTimer() {
+  if (choreographyTimer) {
+    clearTimeout(choreographyTimer)
+    choreographyTimer = undefined
+  }
+}
+
+function scheduleChoreographyStep() {
+  clearChoreographyTimer()
+  if (!choreographyAutoPlay.value || !teachingActive.value) return
+  const current = currentChoreographyStep.value
+  if (!current || choreographyIndex.value >= choreographySteps.value.length - 1) return
+  choreographyTimer = window.setTimeout(() => {
+    void nextChoreographyStep()
+  }, current.durationMs)
+}
+
+async function applyChoreographyStep() {
+  const current = currentChoreographyStep.value
+  if (!current) return
+  choreographyAction.value = current.action
+  bubble.value = current.message
+  await syncPresenterState()
+  scheduleChoreographyStep()
+}
+
+async function resetChoreography() {
+  clearChoreographyTimer()
+  choreographyIndex.value = 0
+  choreographyAction.value = 'explain'
+  if (currentChoreographyStep.value) await applyChoreographyStep()
+}
+
+async function nextChoreographyStep() {
+  if (choreographyIndex.value >= choreographySteps.value.length - 1) return
+  choreographyIndex.value += 1
+  await applyChoreographyStep()
+}
+
+async function previousChoreographyStep() {
+  if (choreographyIndex.value <= 0) return
+  choreographyIndex.value -= 1
+  await applyChoreographyStep()
+}
+
+async function toggleChoreographyAutoPlay() {
+  choreographyAutoPlay.value = !choreographyAutoPlay.value
+  await syncPresenterState()
+  if (choreographyAutoPlay.value) scheduleChoreographyStep()
+  else clearChoreographyTimer()
 }
 
 async function setFullscreen(value: boolean) {
@@ -149,11 +225,13 @@ async function setFullscreen(value: boolean) {
 
 async function teachingMode() {
   if (teachingActive.value) {
+    clearChoreographyTimer()
     presentationOpen.value = false
     presenterNotesOpen.value = false
     await setPresenterWindowVisible(false)
     await setFullscreen(false)
     speak('Class finished. Nice teaching! 🎓', 'success', true)
+    choreographyAction.value = 'celebrate'
     await syncPresenterState()
   } else {
     teachingPage.value = 1
@@ -165,8 +243,8 @@ async function teachingMode() {
       await setFullscreen(true)
       if (dualMonitorMode.value && dualMonitorAvailable.value) await setPresenterWindowVisible(true)
     }
-    const cue = currentTeachingCue.value
-    bubble.value = cue ? `Page 1/${teachingPages.value}: ${cue.message}` : `Teaching mode ready: ${teachingTopic.value}. 🎓`
+    if (currentTeachingCue.value) await resetChoreography()
+    else bubble.value = `Teaching mode ready: ${teachingTopic.value}. 🎓`
     await syncPresenterState()
   }
   menuOpen.value = false
@@ -174,19 +252,26 @@ async function teachingMode() {
 
 async function changeTeachingPage(delta: number) {
   teachingPage.value = Math.max(1, Math.min(teachingPages.value, teachingPage.value + delta))
-  const cue = currentTeachingCue.value
-  bubble.value = cue
-    ? `Page ${teachingPage.value}/${teachingPages.value}: ${cue.message}`
-    : `Page ${teachingPage.value}/${teachingPages.value}: Continue explaining the main idea.`
-  await syncPresenterState()
+  await resetChoreography()
+  if (!currentChoreographyStep.value) {
+    const cue = currentTeachingCue.value
+    bubble.value = cue
+      ? `Page ${teachingPage.value}/${teachingPages.value}: ${cue.message}`
+      : `Page ${teachingPage.value}/${teachingPages.value}: Continue explaining the main idea.`
+    await syncPresenterState()
+  }
 }
 
 async function askClass() {
+  clearChoreographyTimer()
+  choreographyAction.value = 'think'
   bubble.value = 'Question time! What do you think about this point? ❓'
   await syncPresenterState()
 }
 
 async function startDiscussion() {
+  clearChoreographyTimer()
+  choreographyAction.value = 'discuss'
   bubble.value = 'Discussion time! Discuss this idea with your group. 💬'
   await syncPresenterState()
 }
@@ -213,6 +298,9 @@ function handleKey(event: KeyboardEvent) {
   if (event.key.toLowerCase() === 'q') void askClass()
   if (event.key.toLowerCase() === 'd') void startDiscussion()
   if (event.key.toLowerCase() === 'n') presenterNotesOpen.value = !presenterNotesOpen.value
+  if (event.key === ']') void nextChoreographyStep()
+  if (event.key === '[') void previousChoreographyStep()
+  if (event.key.toLowerCase() === 'a') void toggleChoreographyAutoPlay()
 }
 
 onMounted(async () => {
@@ -224,6 +312,9 @@ onMounted(async () => {
     if (action === 'next') void changeTeachingPage(1)
     if (action === 'question') void askClass()
     if (action === 'discussion') void startDiscussion()
+    if (action === 'cue-prev') void previousChoreographyStep()
+    if (action === 'cue-next') void nextChoreographyStep()
+    if (action === 'auto') void toggleChoreographyAutoPlay()
     if (action === 'end') void teachingMode()
   })
   unlistenReady = await listen('presenter-ready', () => { void syncPresenterState() })
@@ -243,6 +334,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKey)
   unlistenControl?.()
   unlistenReady?.()
+  clearChoreographyTimer()
   if (timer) clearInterval(timer)
   if (bubbleReset) clearTimeout(bubbleReset)
 })
@@ -252,7 +344,7 @@ onUnmounted(() => {
   <main class="desktop" :class="{ teaching: teachingActive, presenting: builtInPresentation }">
     <template v-if="builtInPresentation && preparedPdf">
       <PdfPresentationStage :pdf="preparedPdf" :page="teachingPage" @error="bubble = $event" />
-      <div class="presentation-target" :style="pointStyle" title="NyanMate focus target"><span></span></div>
+      <div class="presentation-target" :style="pointStyle" :title="currentTeachingCue?.focusLabel || 'NyanMate focus target'"><span></span></div>
 
       <div class="presentation-topbar">
         <strong>🎓 {{ teachingTopic }}</strong>
@@ -270,7 +362,17 @@ onUnmounted(() => {
         <button :disabled="teachingPage >= teachingPages" @click="changeTeachingPage(1)">→</button>
       </div>
 
-      <div class="teaching-pet-overlay" :class="petSide">
+      <TeachingChoreography
+        v-if="choreographySteps.length"
+        :steps="choreographySteps"
+        :index="choreographyIndex"
+        :auto-play="choreographyAutoPlay"
+        @previous="previousChoreographyStep"
+        @next="nextChoreographyStep"
+        @toggle-auto="toggleChoreographyAutoPlay"
+      />
+
+      <div class="teaching-pet-overlay" :class="[petSide, `choreo-${choreographyAction}`]">
         <div class="presentation-bubble">{{ bubble }}</div>
         <NyanPet :state="petState" :draggable="false" :pointer-direction="pointerDirection" @pet="petNyan" />
       </div>
@@ -278,7 +380,7 @@ onUnmounted(() => {
 
     <template v-else>
       <section v-if="menuOpen" class="panel">
-        <header><strong>NyanMate v0.6</strong><button @click="menuOpen=false">×</button></header>
+        <header><strong>NyanMate v0.8</strong><button @click="menuOpen=false">×</button></header>
         <PdfTeachingPanel @prepared="handlePdfPrepared" @cue="handlePreparedCue" />
 
         <div class="section dual-monitor-setup">
@@ -288,6 +390,12 @@ onUnmounted(() => {
             <option v-for="(name, index) in monitorNames" :key="name + index" :value="index">Projector: {{ name }}</option>
           </select>
           <small>{{ dualMonitorAvailable ? `${monitorNames.length} displays detected. Presenter Console will remain separate from the projected PDF.` : 'One display detected. NyanMate will use same-screen presenter notes.' }}</small>
+        </div>
+
+        <div class="section teaching-setup">
+          <h3>🎬 Teaching choreography</h3>
+          <label class="dual-toggle"><input v-model="choreographyAutoPlay" type="checkbox" /> Auto-play gestures and teaching cues on each page</label>
+          <small>During presentation: `[` previous cue · `]` next cue · `A` auto-play on/off.</small>
         </div>
 
         <div class="section">
@@ -307,7 +415,7 @@ onUnmounted(() => {
           <h3>🎓 Teaching companion</h3>
           <input v-model="teachingTopic" placeholder="Presentation/PDF title" />
           <div class="page-config"><span>Pages</span><input v-model.number="teachingPages" type="number" min="1" max="999" /></div>
-          <small v-if="preparedPdf" class="prepared-note">✓ PDF cues, safe-side analysis, pointer targeting, and presenter console ready.</small>
+          <small v-if="preparedPdf" class="prepared-note">✓ Semantic targets + presenter console + choreography ready for {{ preparedPdf.pageCount }} pages.</small>
         </div>
 
         <div class="actions">

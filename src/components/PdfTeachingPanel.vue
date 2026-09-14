@@ -13,6 +13,7 @@ const prepared = ref<PreparedPdf | null>(null)
 const currentPage = ref(1)
 
 const currentCue = computed(() => prepared.value?.cues[currentPage.value - 1] ?? null)
+const confidenceText = computed(() => currentCue.value ? `${Math.round(currentCue.value.confidence * 100)}%` : '—')
 
 async function handleFile(file?: File) {
   if (!file) return
@@ -81,6 +82,12 @@ defineExpose({ go, setPage })
       <div v-if="currentCue" class="cue-card">
         <div class="cue-head"><span>Page {{ currentPage }} / {{ prepared.pageCount }}</span><b>{{ currentCue.title }}</b></div>
         <p>{{ currentCue.message }}</p>
+        <div class="focus-meta">
+          <span>🎯 {{ currentCue.focusLabel }}</span>
+          <span>{{ currentCue.focusKind }}</span>
+          <span>{{ confidenceText }}</span>
+          <span>pet: {{ currentCue.safeSide }}</span>
+        </div>
         <small v-if="currentCue.textPreview">“{{ currentCue.textPreview }}{{ currentCue.textPreview.length >= 180 ? '…' : '' }}”</small>
       </div>
 

@@ -2,67 +2,62 @@
 
 NyanMate is a lightweight, local-first AI desktop companion built with **Tauri 2 + Vue 3 + TypeScript + Rust**. It combines an original desktop pet with productivity tools, PDF teaching support, local analytics, reminders, file inspection, and an extensible AI/coding-companion architecture.
 
-## Current prototype — v0.26.x
+## Current prototype — v0.28.x
 
 NyanMate currently includes:
 
 - transparent always-on-top desktop pet with interaction states;
 - autonomous idle behavior, local mood, micro-roaming, personality, and customization;
-- configurable pet name, accessory, motion level, sleep timeout, and autonomous movement;
+- **8 original cat characters** with different colors, markings, silhouettes, and animation accents;
+- mouse-following eyes, petting/purring reaction, mochi-style drag stretch, fast-cursor hunting, keyboard kneading/overheat, scroll tissue reaction, wellness reminders, fixed message, owner-name reminders, and manual peeking mode;
+- configurable pet name, owner name, accessory, motion level, sleep timeout, autonomous movement, stretch/water interval, and interactive-reaction toggles;
 - Smart Agenda with one-time/daily/weekly/monthly recurrence, editing, snooze, reminders, Daily Brief, countdowns, and `.ics` import/export;
 - Pomodoro focus timer;
 - built-in PDF Teaching Mode with fullscreen presentation, semantic focus targeting, choreography, Presenter Console, presenter notes, assessments, local reports, pacing analytics, Teaching Insights, Smart Lesson Rebalancer, Teaching Templates, and Pre-Class Run Sheet;
 - AI Coding Companion state normalization for OpenCode, Codex, Claude Code, Cursor, Kiro, Antigravity, Devin, Copilot CLI, and custom agents;
-- Drop-a-File Assistant for local inspection of text, Markdown, JSON, common source-code files, and PDF hand-off guidance;
-- Local Assistant Chat with persistent local history and explicit loaded-file context consent;
-- **opt-in OpenAI-compatible provider adapter** with configurable endpoint/model, connection test, session-only API key storage, and a second explicit approval before loaded-file context can be included in a remote request.
+- Drop-a-File Assistant, Local Assistant Chat, and an opt-in OpenAI-compatible provider adapter.
 
 ## Desktop Pet milestones
 
-### v0.18 — AI Coding Companion
-NyanMate accepts normalized coding-agent states: `idle`, `starting`, `thinking`, `coding`, `running`, `waiting`, `success`, and `error`.
+### v0.18–v0.21 — Living pet foundation
+NyanMate gained normalized coding-agent reactions, autonomous look-around/groom/stretch/rest/doze behavior, deterministic local mood, bounded micro-roaming, personality, accessories, sleep settings, and persistent local customization.
 
-### v0.19 — Living Pet Behavior
-The mascot gained lightweight autonomous idle activities such as looking around, grooming, stretching, resting, and dozing.
+### v0.27 — Cat Collection
+NyanMate adds eight original cat variants: **Momo, Kuro, Mikan, Yuki, Sora, Mocha, Sakura, and Tora**. Variants have their own fur palettes, markings, silhouette adjustments, eye accents, tail/body details, and selected animation differences rather than being simple recolors.
 
-### v0.20 — Mood + Micro-Roaming
-A deterministic local mood layer adds calm, curious, playful, and sleepy states without camera, microphone, or screen surveillance.
+### v0.28 — Interactive Cat Pack
+NyanMate adds original equivalents for classic desktop-pet interactions:
 
-### v0.21 — Personality + Customization
-Right-click the mascot to configure pet name, personality, accessory, motion intensity, sleep timeout, and autonomous movement. Settings remain local on the device.
+- **Eye Follow** — eyes track the pointer inside the NyanMate window.
+- **Mochi Drag** — dragging temporarily stretches the mascot before the native window drag takes over.
+- **Cursor Hunting** — fast pointer movement inside the NyanMate WebView triggers a short pounce/hunt reaction.
+- **Head Pet / Purr** — clicking the head produces a visible `prrrr` reaction while preserving the existing pet interaction.
+- **Keyboard Kneading** — keyboard activity inside the NyanMate WebView alternates the front paws.
+- **Overheat** — rapid local key activity makes the cat blush/heat up and emits animated steam.
+- **Stretch Reminder** — configurable local timer asks the user to stretch and triggers the stretch activity.
+- **Water Reminder** — configurable local hydration reminder.
+- **Scroll Tissue Reaction** — wheel activity inside the WebView triggers a playful tissue-roll animation.
+- **Fixed Message** — a short pinned message can stay above the mascot.
+- **Owner Name** — reminders can address the user by name.
+- **Peeking Mode** — an optional compact visual mode shifts the mascot toward the screen edge.
+
+Important limitation: cursor, keyboard, and scroll reactions currently observe events **inside the NyanMate WebView only**. They are not yet OS-wide global hooks. Peeking mode is manually configurable and does not yet automatically detect video playback/fullscreen in other applications. No third-party Comnyang artwork, animation files, or source code are used.
 
 ## Productivity milestones
 
-### v0.22 — Smart Agenda
-Smart Agenda gained its own desktop window from the NyanMate system tray, recurring schedules, configurable reminder lead time, Daily Brief, Today view, and a 14-day occurrence preview.
-
-### v0.23 — Agenda Edit, Snooze + Calendar Exchange
-Smart Agenda supports editing recurring items, 5/10/30-minute snooze controls, reminder de-duplication per occurrence, optional WebView desktop notifications, and `.ics` import/export.
+### v0.22–v0.23 — Smart Agenda
+Smart Agenda has its own desktop window with recurring schedules, configurable reminder lead time, Daily Brief, Today/14-day previews, editing, snooze, reminder de-duplication, optional WebView notifications, and `.ics` import/export.
 
 ## Assistant milestones
 
 ### v0.24 — Drop-a-File Assistant
-A dedicated File Assistant window is available from the system tray. Users can drop or choose PDF, TXT, Markdown, JSON, CSV/log, and common source-code files. Text/code inspection runs locally and does not upload files automatically.
-
-The lightweight scanner detects file type, code language, line/word counts, simple declarations/imports, readable previews, and local actions such as **Summarize**, **Explain**, and **Inspect code**. PDFs are recognized and routed toward the existing Teaching Companion workflow.
+A dedicated File Assistant window accepts PDF, TXT, Markdown, JSON, CSV/log, and common source-code files. Text/code inspection runs locally and does not upload files automatically.
 
 ### v0.25 — Local Assistant Chat
-The File Assistant includes a Chat tab with persistent local conversation history. The default chat engine is deterministic and offline. Loaded-file context is off by default and must be explicitly enabled.
+The Assistant includes persistent local chat history and explicit loaded-file context consent. The default chat engine is deterministic and offline.
 
 ### v0.26 — Opt-in AI Provider Adapter
-The Assistant now has a **Provider** tab. By default NyanMate remains in local deterministic mode. Users can optionally switch to an **OpenAI-compatible API** and configure:
-
-- base URL;
-- model name;
-- temperature and max-token limit;
-- optional API key;
-- connection testing through the provider's `/models` endpoint.
-
-Provider configuration is stored locally, but the API key is deliberately excluded from persistent provider settings and kept only in `sessionStorage` for the current app session. It is not embedded in source code. This is a safer interim approach until a native OS keychain integration is added.
-
-Remote chat sends only normal chat messages by default. A loaded file is **not** included merely because file context is enabled locally: when a remote provider is active, NyanMate requires a second explicit approval — **Explicitly allow sending this file preview/summary to the configured provider** — before any loaded-file summary/preview is added to the request.
-
-The current adapter targets the common `/v1/models` and `/v1/chat/completions` OpenAI-compatible contract. Compatibility depends on the selected server/provider and its CORS/WebView policy. NyanMate does not bundle or hard-code any third-party API key.
+Users may optionally configure an OpenAI-compatible endpoint/model. API keys are not committed to source code and currently remain session-only. Remote loaded-file context requires a second explicit approval before it can be included in a request.
 
 ## Teaching Companion milestones
 
@@ -82,13 +77,11 @@ NyanMate adds Lesson Flow planning, Quiz/Check/Practice interactions, local clas
 - Cloud/AI providers are explicit opt-in integrations
 - Remote file context requires separate explicit approval
 - API keys are not committed to source code
-- Lecturer remains in control of teaching page transitions and plan changes
-- Analytics provide evidence and suggestions, not causal judgments
 - Original visuals and behavior; NyanMate is not a copy of third-party character assets
 
 ## Planned modules
 
-1. **Living Desktop Pet** — richer reactions, accessory packs, and polished movement.
+1. **Living Desktop Pet** — native global input hooks, richer pet physics, audio packs, and automatic edge-peek behavior.
 2. **Smart Agenda** — calendar-provider integrations and stronger native notification support.
 3. **Teaching Companion** — maintain and polish existing local teaching workflow.
 4. **AI Coding Companion** — connect normalized states to real local CLI adapters.

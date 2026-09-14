@@ -41,6 +41,19 @@ export interface StageTiming {
   seconds: number
 }
 
+export interface PlannedPageTiming {
+  page: number
+  stage: string
+  targetSec: number
+}
+
+export interface DiscussionEvent {
+  page: number
+  stage: string
+  startedAt: string
+  plannedSec: number
+}
+
 export interface ClassSessionReport {
   pdfName: string
   startedAt: string
@@ -50,6 +63,8 @@ export interface ClassSessionReport {
   assessments: AssessmentResult[]
   pageTimings?: PageTiming[]
   stageTimings?: StageTiming[]
+  plannedPageTimings?: PlannedPageTiming[]
+  discussionEvents?: DiscussionEvent[]
 }
 
 export interface ReportSummary {
@@ -79,7 +94,26 @@ export interface StageAnalytics {
   sessions: number
 }
 
-export type TeachingInsightKind = 'pace' | 'stage' | 'assessment' | 'coverage' | 'trend' | 'positive'
+export interface PlanActualAnalytics {
+  page: number
+  stage: string
+  targetSec: number
+  averageActualSec: number
+  varianceSec: number
+  variancePercent: number
+  sessions: number
+  status: 'under' | 'on-target' | 'over'
+}
+
+export interface DiscussionAnalytics {
+  page: number
+  stage: string
+  count: number
+  sessions: number
+  averagePlannedSec: number
+}
+
+export type TeachingInsightKind = 'pace' | 'stage' | 'assessment' | 'coverage' | 'trend' | 'positive' | 'plan' | 'discussion'
 export type TeachingInsightSeverity = 'info' | 'watch' | 'action'
 
 export interface TeachingInsight {
@@ -240,6 +274,60 @@ export function aggregateStageAnalytics(reports: ClassSessionReport[]): StageAna
     .sort((a, b) => b.totalSec - a.totalSec)
 }
 
+export function aggregatePlanVsActual(reports: ClassSessionReport[]): PlanActualAnalytics[] {
+  const map = new Map<number, { stage: string; target: number; actual: number; sessions: number }>()
+  for (const report of reports) {
+    const actualByPage = new Map((report.pageTimings ?? []).map(item => [item.page, item]))
+    for (const planned of report.plannedPageTimings ?? []) {
+      const actual = actualByPage.get(planned.page)
+      if (!actual) continue
+      const entry = map.get(planned.page) ?? { stage: planned.stage, target: 0, actual: 0, sessions: 0 }
+      entry.stage = planned.stage || entry.stage
+      entry.target += Math.max(1, planned.targetSec)
+      entry.actual += Math.max(0, actual.seconds)
+      entry.sessions += 1
+      map.set(planned.page, entry)
+    }
+  }
+  return [...map.entries()].map(([page, entry]) => {
+    const targetSec = Math.round(entry.target / Math.max(1, entry.sessions))
+    const averageActualSec = Math.round(entry.actual / Math.max(1, entry.sessions))
+    const varianceSec = averageActualSec - targetSec
+    const variancePercent = targetSec ? Math.round((varianceSec / targetSec) * 100) : 0
+    return {
+      page,
+      stage: entry.stage,
+      targetSec,
+      averageActualSec,
+      varianceSec,
+      variancePercent,
+      sessions: entry.sessions,
+      status: variancePercent >= 20 ? 'over' : variancePercent <= -20 ? 'under' : 'on-target',
+    }
+  }).sort((a, b) => Math.abs(b.variancePercent) - Math.abs(a.variancePercent))
+}
+
+export function aggregateDiscussionAnalytics(reports: ClassSessionReport[]): DiscussionAnalytics[] {
+  const map = new Map<number, { stage: string; count: number; planned: number; sessions: Set<number> }>()
+  reports.forEach((report, sessionIndex) => {
+    for (const event of report.discussionEvents ?? []) {
+      const entry = map.get(event.page) ?? { stage: event.stage || 'discussion', count: 0, planned: 0, sessions: new Set<number>() }
+      entry.stage = event.stage || entry.stage
+      entry.count += 1
+      entry.planned += Math.max(0, event.plannedSec)
+      entry.sessions.add(sessionIndex)
+      map.set(event.page, entry)
+    }
+  })
+  return [...map.entries()].map(([page, entry]) => ({
+    page,
+    stage: entry.stage,
+    count: entry.count,
+    sessions: entry.sessions.size,
+    averagePlannedSec: entry.count ? Math.round(entry.planned / entry.count) : 0,
+  })).sort((a, b) => b.count - a.count || a.page - b.page)
+}
+
 function median(values: number[]) {
   if (!values.length) return 0
   const sorted = [...values].sort((a, b) => a - b)
@@ -257,13 +345,60 @@ export function generateTeachingInsights(reports: ClassSessionReport[]): Teachin
   const insights: TeachingInsight[] = []
   const pages = aggregatePageAnalytics(reports)
   const stages = aggregateStageAnalytics(reports)
+  const planActual = aggregatePlanVsActual(reports)
+  const discussions = aggregateDiscussionAnalytics(reports)
   const baseline = median(pages.filter(item => item.sessions >= Math.min(2, reports.length)).map(item => item.averageSec).filter(Boolean))
+
+  const repeatedOver = planActual.filter(item => item.sessions >= Math.min(2, reports.length) && item.variancePercent >= 25).slice(0, 3)
+  for (const item of repeatedOver) {
+    insights.push({
+      id: `plan-over-${item.page}`,
+      kind: 'plan',
+      severity: item.variancePercent >= 60 ? 'action' : 'watch',
+      title: `Halaman ${item.page} konsisten melewati target`,
+      detail: `Target rata-rata ${formatShort(item.targetSec)}, aktual ${formatShort(item.averageActualSec)} (${item.variancePercent > 0 ? '+' : ''}${item.variancePercent}%).`,
+      recommendation: `Naikkan target waktu halaman ${item.page} atau ringkas materi agar Lesson Flow lebih realistis.`,
+      page: item.page,
+      stage: item.stage,
+      metric: `+${item.variancePercent}%`,
+    })
+  }
+
+  const repeatedUnder = planActual.filter(item => item.sessions >= Math.min(2, reports.length) && item.variancePercent <= -35).slice(0, 2)
+  for (const item of repeatedUnder) {
+    insights.push({
+      id: `plan-under-${item.page}`,
+      kind: 'plan',
+      severity: 'info',
+      title: `Halaman ${item.page} lebih cepat dari rencana`,
+      detail: `Aktual ${formatShort(item.averageActualSec)} dibanding target ${formatShort(item.targetSec)} (${item.variancePercent}%).`,
+      recommendation: 'Gunakan waktu sisa untuk contoh, pertanyaan pemantik, atau kurangi target durasi agar rencana lebih presisi.',
+      page: item.page,
+      stage: item.stage,
+      metric: `${item.variancePercent}%`,
+    })
+  }
+
+  const frequentDiscussion = discussions.find(item => item.sessions >= 2 && item.count >= Math.max(2, item.sessions))
+  if (frequentDiscussion) {
+    insights.push({
+      id: `discussion-${frequentDiscussion.page}`,
+      kind: 'discussion',
+      severity: 'info',
+      title: `Halaman ${frequentDiscussion.page} sering memicu diskusi`,
+      detail: `${frequentDiscussion.count} diskusi tercatat pada ${frequentDiscussion.sessions} sesi, dengan rencana rata-rata ${formatShort(frequentDiscussion.averagePlannedSec)}.`,
+      recommendation: 'Pertimbangkan menjadikan diskusi di halaman ini sebagai aktivitas eksplisit dalam Lesson Flow.',
+      page: frequentDiscussion.page,
+      stage: frequentDiscussion.stage,
+      metric: `${frequentDiscussion.count} diskusi`,
+    })
+  }
 
   if (baseline > 0) {
     const slow = pages
       .filter(item => item.averageSec >= Math.max(45, baseline * 1.7) && item.sessions >= Math.min(2, reports.length))
       .sort((a, b) => b.averageSec - a.averageSec)
-      .slice(0, 3)
+      .slice(0, 2)
     for (const item of slow) {
       const ratio = Math.round((item.averageSec / baseline) * 10) / 10
       insights.push({
@@ -372,7 +507,7 @@ export function generateTeachingInsights(reports: ClassSessionReport[]): Teachin
     })
   }
 
-  return insights.slice(0, 8)
+  return insights.slice(0, 10)
 }
 
 export function buildTeachingReflection(reports: ClassSessionReport[]): TeachingReflection {
@@ -380,6 +515,8 @@ export function buildTeachingReflection(reports: ClassSessionReport[]): Teaching
   const summary = summarizeReports(reports)
   const insights = generateTeachingInsights(reports)
   const strengths = insights.filter(item => item.kind === 'positive').map(item => item.title)
+  const onTarget = aggregatePlanVsActual(reports).filter(item => item.status === 'on-target').length
+  if (onTarget >= 3) strengths.unshift(`${onTarget} halaman berjalan mendekati target waktu Lesson Flow`)
   if (summary.accuracyPercent != null && summary.accuracyPercent >= 80) strengths.unshift(`Akurasi assessment keseluruhan ${summary.accuracyPercent}%`)
   if (!strengths.length && reports.length >= 2) strengths.push('Data lintas sesi sudah cukup untuk mulai membandingkan pola pacing secara konsisten.')
 
@@ -396,19 +533,21 @@ export function buildTeachingReflection(reports: ClassSessionReport[]): Teaching
 }
 
 export function reportsToCsv(reports: ClassSessionReport[]): string {
-  const header = ['pdfName','startedAt','finishedAt','durationSec','pagesVisited','pageTimings','stageTimings','assessmentPage','assessmentKind','selectedOptionId','correct','revealed','answeredAt']
+  const header = ['pdfName','startedAt','finishedAt','durationSec','pagesVisited','pageTimings','stageTimings','plannedPageTimings','discussionEvents','assessmentPage','assessmentKind','selectedOptionId','correct','revealed','answeredAt']
   const rows: string[][] = [header]
   const quote = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
   const pageTimingsText = (report: ClassSessionReport) => (report.pageTimings ?? []).map(item => `${item.page}:${item.stage}:${item.seconds}s:${item.visits}v`).join('|')
   const stageTimingsText = (report: ClassSessionReport) => (report.stageTimings ?? []).map(item => `${item.stage}:${item.seconds}s`).join('|')
+  const plannedText = (report: ClassSessionReport) => (report.plannedPageTimings ?? []).map(item => `${item.page}:${item.stage}:${item.targetSec}s`).join('|')
+  const discussionText = (report: ClassSessionReport) => (report.discussionEvents ?? []).map(item => `${item.page}:${item.stage}:${item.plannedSec}s:${item.startedAt}`).join('|')
   for (const report of reports) {
     if (!report.assessments.length) {
-      rows.push([report.pdfName, report.startedAt, report.finishedAt, String(report.durationSec), report.pagesVisited.join('|'), pageTimingsText(report), stageTimingsText(report), '', '', '', '', '', ''])
+      rows.push([report.pdfName, report.startedAt, report.finishedAt, String(report.durationSec), report.pagesVisited.join('|'), pageTimingsText(report), stageTimingsText(report), plannedText(report), discussionText(report), '', '', '', '', '', ''])
       continue
     }
     for (const result of report.assessments) {
       rows.push([
-        report.pdfName, report.startedAt, report.finishedAt, String(report.durationSec), report.pagesVisited.join('|'), pageTimingsText(report), stageTimingsText(report),
+        report.pdfName, report.startedAt, report.finishedAt, String(report.durationSec), report.pagesVisited.join('|'), pageTimingsText(report), stageTimingsText(report), plannedText(report), discussionText(report),
         String(result.page), result.kind, result.selectedOptionId ?? '', result.correct == null ? '' : String(result.correct), String(result.revealed), result.answeredAt ?? '',
       ])
     }

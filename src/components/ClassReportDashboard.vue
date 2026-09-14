@@ -3,6 +3,8 @@ import { computed, ref, watch } from 'vue'
 import {
   aggregatePageAnalytics,
   aggregateStageAnalytics,
+  buildTeachingReflection,
+  generateTeachingInsights,
   loadReportHistory,
   loadReportIndex,
   reportsToCsv,
@@ -21,6 +23,8 @@ const activePdf = computed(() => props.pdfName || selectedPdf.value)
 const summary = computed(() => summarizeReports(reports.value))
 const pageAnalytics = computed(() => aggregatePageAnalytics(reports.value))
 const stageAnalytics = computed(() => aggregateStageAnalytics(reports.value))
+const insights = computed(() => generateTeachingInsights(reports.value))
+const reflection = computed(() => buildTeachingReflection(reports.value))
 const selectedReport = computed(() => reports.value[selectedIndex.value] ?? null)
 const maxPageAverage = computed(() => Math.max(1, ...pageAnalytics.value.map(item => item.averageSec)))
 const maxStageTotal = computed(() => Math.max(1, ...stageAnalytics.value.map(item => item.totalSec)))
@@ -60,7 +64,7 @@ watch(() => props.pdfName, load, { immediate: true })
     <section class="report-dashboard">
       <div class="report-dashboard-head">
         <div>
-          <small>📊 NyanMate Teaching Analytics</small>
+          <small>🧠 NyanMate Teaching Insights</small>
           <h3>{{ activePdf || 'No class reports yet' }}</h3>
         </div>
         <div class="report-actions">
@@ -87,6 +91,27 @@ watch(() => props.pdfName, load, { immediate: true })
           <article><small>Assessment</small><strong>{{ summary.totalAssessments }}</strong></article>
           <article><small>Akurasi</small><strong>{{ summary.accuracyPercent == null ? '—' : `${summary.accuracyPercent}%` }}</strong></article>
         </div>
+
+        <section class="teaching-reflection">
+          <div class="reflection-head"><div><small>✨ Post-class reflection</small><h4>{{ reflection.headline }}</h4></div><span>{{ reports.length }} session{{ reports.length === 1 ? '' : 's' }}</span></div>
+          <p>{{ reflection.summary }}</p>
+          <div class="reflection-columns">
+            <div><strong>Yang berjalan baik</strong><ul><li v-for="item in reflection.strengths" :key="item">{{ item }}</li><li v-if="!reflection.strengths.length">Belum cukup data untuk menyimpulkan pola positif.</li></ul></div>
+            <div><strong>Fokus kelas berikutnya</strong><ul><li v-for="item in reflection.actions" :key="item">{{ item }}</li><li v-if="!reflection.actions.length">Belum ada peringatan utama dari data saat ini.</li></ul></div>
+          </div>
+        </section>
+
+        <section class="insight-section" v-if="insights.length">
+          <div class="analytics-head"><div><small>💡 Automatic insights</small><h4>Pola yang terdeteksi dari riwayat kelas</h4></div><span>{{ insights.length }} insight</span></div>
+          <div class="insight-grid">
+            <article v-for="item in insights" :key="item.id" class="insight-card" :class="`severity-${item.severity}`">
+              <div class="insight-card-head"><span>{{ item.kind }}</span><b v-if="item.metric">{{ item.metric }}</b></div>
+              <h4>{{ item.title }}</h4>
+              <p>{{ item.detail }}</p>
+              <small>{{ item.recommendation }}</small>
+            </article>
+          </div>
+        </section>
 
         <section class="analytics-section" v-if="pageAnalytics.length">
           <div class="analytics-head"><div><small>⏱ Page analytics</small><h4>Waktu rata-rata per halaman</h4></div><span>{{ pageAnalytics.length }} pages tracked</span></div>

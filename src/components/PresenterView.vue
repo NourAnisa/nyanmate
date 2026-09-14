@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { getCurrentWindow, primaryMonitor } from '@tauri-apps/api/window'
 
 interface PresenterState {
   active: boolean
@@ -33,6 +34,13 @@ function control(action: 'prev' | 'next' | 'question' | 'discussion' | 'end') {
 }
 
 onMounted(async () => {
+  try {
+    const primary = await primaryMonitor()
+    if (primary) await getCurrentWindow().setPosition(primary.position)
+  } catch {
+    // Browser preview or restricted window API: keep the default position.
+  }
+
   unlisten = await listen<PresenterState>('presenter-state', (event) => {
     state.value = event.payload
   })

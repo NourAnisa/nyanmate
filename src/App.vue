@@ -11,370 +11,62 @@ import TeachingChoreography from './components/TeachingChoreography.vue'
 import LessonFlowEditor from './components/LessonFlowEditor.vue'
 import AssessmentEditor from './components/AssessmentEditor.vue'
 import AssessmentOverlay from './components/AssessmentOverlay.vue'
+import CodingCompanionPanel from './components/CodingCompanionPanel.vue'
 import type { PreparedPdf, TeachingCue } from './services/pdfTeaching'
 import { buildPageChoreography, type ChoreographyAction, type ChoreographyStep } from './services/teachingChoreography'
 import { createDefaultLessonFlow, getLessonPagePlan, loadLessonFlow, type LessonFlowConfig } from './services/lessonFlow'
-import {
-  getPageAssessment,
-  loadAssessmentConfig,
-  saveSessionReport,
-  type AssessmentConfig,
-  type AssessmentResult,
-  type DiscussionEvent,
-  type PageTiming,
-  type PlannedPageTiming,
-  type StageTiming,
-} from './services/assessment'
-import type { AgendaItem, PetState } from './types'
+import { agentBubble, agentStateToPetState, normalizeAgentEvent, type CodingAgentEvent } from './services/codingCompanion'
+import { getPageAssessment, loadAssessmentConfig, saveSessionReport, type AssessmentConfig, type AssessmentResult, type DiscussionEvent, type PageTiming, type PlannedPageTiming, type StageTiming } from './services/assessment'
+import type { AgendaItem, AgentStatus, PetState } from './types'
 
-const petState = ref<PetState>('idle')
-const bubble = ref('Hi! I’m NyanMate ✨')
-const menuOpen = ref(false)
-const agenda = ref<AgendaItem[]>(JSON.parse(localStorage.getItem('nyanmate-agenda') || '[]'))
-const newTitle = ref('')
-const newTime = ref('')
-const focusSeconds = ref(25 * 60)
-const focusRunning = ref(false)
-const teachingPage = ref(1)
-const teachingPages = ref(20)
-const teachingTopic = ref('PDF Presentation')
-const preparedPdf = ref<PreparedPdf | null>(null)
-const lessonFlow = ref<LessonFlowConfig | null>(null)
-const lessonPageRemaining = ref(0)
-const assessmentConfig = ref<AssessmentConfig | null>(null)
-const assessmentOpen = ref(false)
-const assessmentRemaining = ref(0)
-const selectedOptionId = ref('')
-const assessmentRevealed = ref(false)
-const assessmentResults = ref<AssessmentResult[]>([])
-const sessionStartedAt = ref<string | null>(null)
-const visitedPages = ref<number[]>([])
-const pageTimingMap = ref<Record<number, PageTiming>>({})
-const discussionEvents = ref<DiscussionEvent[]>([])
-const presentationOpen = ref(false)
-const presenterNotesOpen = ref(false)
-const monitorNames = ref<string[]>([])
-const projectorMonitorIndex = ref(1)
-const dualMonitorMode = ref(true)
-const choreographyIndex = ref(0)
-const choreographyAutoPlay = ref(true)
-const choreographyAction = ref<ChoreographyAction>('explain')
-let timer: number | undefined
-let bubbleReset: number | undefined
-let choreographyTimer: number | undefined
-let unlistenControl: UnlistenFn | undefined
-let unlistenReady: UnlistenFn | undefined
+const petState = ref<PetState>('idle'), bubble = ref('Hi! I’m NyanMate ✨'), menuOpen = ref(false)
+const agenda = ref<AgendaItem[]>(JSON.parse(localStorage.getItem('nyanmate-agenda') || '[]')), newTitle = ref(''), newTime = ref('')
+const focusSeconds = ref(25 * 60), focusRunning = ref(false), teachingPage = ref(1), teachingPages = ref(20), teachingTopic = ref('PDF Presentation')
+const preparedPdf = ref<PreparedPdf | null>(null), lessonFlow = ref<LessonFlowConfig | null>(null), lessonPageRemaining = ref(0), assessmentConfig = ref<AssessmentConfig | null>(null)
+const assessmentOpen = ref(false), assessmentRemaining = ref(0), selectedOptionId = ref(''), assessmentRevealed = ref(false), assessmentResults = ref<AssessmentResult[]>([])
+const sessionStartedAt = ref<string | null>(null), visitedPages = ref<number[]>([]), pageTimingMap = ref<Record<number, PageTiming>>({}), discussionEvents = ref<DiscussionEvent[]>([])
+const presentationOpen = ref(false), presenterNotesOpen = ref(false), monitorNames = ref<string[]>([]), projectorMonitorIndex = ref(1), dualMonitorMode = ref(true)
+const choreographyIndex = ref(0), choreographyAutoPlay = ref(true), choreographyAction = ref<ChoreographyAction>('explain')
+const agentStatus = ref<AgentStatus | null>(null)
+let timer: number | undefined, bubbleReset: number | undefined, choreographyTimer: number | undefined, unlistenControl: UnlistenFn | undefined, unlistenReady: UnlistenFn | undefined, unlistenAgent: UnlistenFn | undefined
 
-const focusText = computed(() => `${String(Math.floor(focusSeconds.value / 60)).padStart(2, '0')}:${String(focusSeconds.value % 60).padStart(2, '0')}`)
-const teachingActive = computed(() => petState.value === 'teaching')
-const builtInPresentation = computed(() => teachingActive.value && presentationOpen.value && preparedPdf.value !== null)
-const nextAgenda = computed(() => agenda.value.find(item => new Date(item.startsAt).getTime() >= Date.now()))
-const currentTeachingCue = computed(() => preparedPdf.value?.cues[teachingPage.value - 1] ?? null)
-const currentLessonPlan = computed(() => getLessonPagePlan(lessonFlow.value, teachingPage.value))
-const currentAssessment = computed(() => getPageAssessment(assessmentConfig.value, teachingPage.value))
-const lessonTimeText = computed(() => `${String(Math.floor(lessonPageRemaining.value / 60)).padStart(2, '0')}:${String(lessonPageRemaining.value % 60).padStart(2, '0')}`)
-const currentChoreography = computed(() => {
-  const cue = currentTeachingCue.value
-  return cue ? buildPageChoreography(cue, teachingPages.value, currentLessonPlan.value) : { page: teachingPage.value, steps: [] }
-})
-const choreographySteps = computed(() => currentChoreography.value.steps)
-const currentChoreographyStep = computed<ChoreographyStep | null>(() => choreographySteps.value[choreographyIndex.value] ?? null)
-const petSide = computed(() => currentTeachingCue.value?.safeSide === 'right' ? 'pet-right' : 'pet-left')
-const pointerDirection = computed(() => petSide.value === 'pet-right' ? 'left' : 'right')
-const pointStyle = computed(() => ({ left: `${(currentTeachingCue.value?.pointTarget.x ?? .5) * 100}%`, top: `${(currentTeachingCue.value?.pointTarget.y ?? .5) * 100}%` }))
-const dualMonitorAvailable = computed(() => monitorNames.value.length > 1)
+const focusText = computed(() => `${String(Math.floor(focusSeconds.value / 60)).padStart(2,'0')}:${String(focusSeconds.value % 60).padStart(2,'0')}`), teachingActive = computed(() => petState.value === 'teaching')
+const builtInPresentation = computed(() => teachingActive.value && presentationOpen.value && preparedPdf.value !== null), nextAgenda = computed(() => agenda.value.find(item => new Date(item.startsAt).getTime() >= Date.now()))
+const currentTeachingCue = computed(() => preparedPdf.value?.cues[teachingPage.value - 1] ?? null), currentLessonPlan = computed(() => getLessonPagePlan(lessonFlow.value, teachingPage.value)), currentAssessment = computed(() => getPageAssessment(assessmentConfig.value, teachingPage.value))
+const lessonTimeText = computed(() => `${String(Math.floor(lessonPageRemaining.value / 60)).padStart(2,'0')}:${String(lessonPageRemaining.value % 60).padStart(2,'0')}`)
+const currentChoreography = computed(() => currentTeachingCue.value ? buildPageChoreography(currentTeachingCue.value, teachingPages.value, currentLessonPlan.value) : { page: teachingPage.value, steps: [] })
+const choreographySteps = computed(() => currentChoreography.value.steps), currentChoreographyStep = computed<ChoreographyStep | null>(() => choreographySteps.value[choreographyIndex.value] ?? null)
+const petSide = computed(() => currentTeachingCue.value?.safeSide === 'right' ? 'pet-right' : 'pet-left'), pointerDirection = computed(() => petSide.value === 'pet-right' ? 'left' : 'right')
+const pointStyle = computed(() => ({ left:`${(currentTeachingCue.value?.pointTarget.x ?? .5)*100}%`, top:`${(currentTeachingCue.value?.pointTarget.y ?? .5)*100}%` })), dualMonitorAvailable = computed(() => monitorNames.value.length > 1)
 
-function speak(message: string, state: PetState = 'idle', autoReset = false) {
-  bubble.value = message
-  petState.value = state
-  if (bubbleReset) clearTimeout(bubbleReset)
-  if (autoReset) bubbleReset = window.setTimeout(() => { if (!focusRunning.value && !teachingActive.value) petState.value = 'idle' }, 3500)
-}
+function speak(message:string,state:PetState='idle',autoReset=false){ bubble.value=message; petState.value=state; if(bubbleReset)clearTimeout(bubbleReset); if(autoReset)bubbleReset=window.setTimeout(()=>{if(!focusRunning.value&&!teachingActive.value)petState.value='idle'},3500) }
+function handleAgentStatus(status:AgentStatus){ agentStatus.value=status; if(!teachingActive.value)speak(agentBubble(status),agentStateToPetState(status),status.state==='success'||status.state==='error') }
+function petNyan(){if(!teachingActive.value)speak('Prrrr… thank you! ♡','success',true)}
+function addAgenda(){if(!newTitle.value||!newTime.value)return; agenda.value.push({id:crypto.randomUUID(),title:newTitle.value,startsAt:newTime.value,reminded:false}); agenda.value.sort((a,b)=>a.startsAt.localeCompare(b.startsAt)); localStorage.setItem('nyanmate-agenda',JSON.stringify(agenda.value)); speak(`Agenda saved: ${newTitle.value} 📅`,'success',true);newTitle.value='';newTime.value=''}
+function removeAgenda(id:string){agenda.value=agenda.value.filter(i=>i.id!==id);localStorage.setItem('nyanmate-agenda',JSON.stringify(agenda.value))} function toggleFocus(){focusRunning.value=!focusRunning.value;speak(focusRunning.value?'Focus time! I’ll stay with you. 🍅':'Focus paused.',focusRunning.value?'coding':'idle')}
+function resetLessonPageTimer(){lessonPageRemaining.value=currentLessonPlan.value?.durationSec??0} function handleLessonFlowChange(flow:LessonFlowConfig){lessonFlow.value=flow;resetLessonPageTimer()} function handleAssessmentChange(config:AssessmentConfig){assessmentConfig.value=config}
+function handlePdfPrepared(pdf:PreparedPdf){preparedPdf.value=pdf;teachingTopic.value=pdf.name;teachingPages.value=pdf.pageCount;teachingPage.value=1;choreographyIndex.value=0;lessonFlow.value=loadLessonFlow(pdf.name)??createDefaultLessonFlow(pdf.name,pdf.cues,pdf.pageCount);assessmentConfig.value=loadAssessmentConfig(pdf.name);resetLessonPageTimer();bubble.value=`PDF ready: ${pdf.name} · ${pdf.pageCount} pages. Lesson flow + assessments ready. 🧭🧠`}
+function handlePreparedCue(cue:TeachingCue){teachingPage.value=cue.page;choreographyIndex.value=0;assessmentOpen.value=false;resetLessonPageTimer();bubble.value=`Page ${cue.page}: ${cue.message}`}
+async function detectMonitors(){try{const m=await availableMonitors();monitorNames.value=m.map((x,i)=>x.name||`Display ${i+1}`);if(projectorMonitorIndex.value>=m.length)projectorMonitorIndex.value=Math.max(0,m.length-1)}catch{monitorNames.value=['Current display']}}
+async function movePresentationToSelectedMonitor(){if(!dualMonitorMode.value||!dualMonitorAvailable.value)return;try{const m=await availableMonitors(),t=m[projectorMonitorIndex.value];if(!t)return;const w=getCurrentWindow();await w.setFullscreen(false);await w.setPosition(t.position);await w.setSize(t.size)}catch{}}
+async function setPresenterWindowVisible(visible:boolean){try{await invoke('set_presenter_visible',{visible})}catch{}} function presenterNotesText(){return[currentTeachingCue.value?.presenterNote??'',currentLessonPlan.value?.note,localStorage.getItem(`nyanmate-note-${teachingPage.value}`)??''].filter(Boolean).join('\n\n')}
+async function syncPresenterState(){const c=currentTeachingCue.value,s=currentChoreographyStep.value;await emit('presenter-state',{active:builtInPresentation.value,topic:teachingTopic.value,page:teachingPage.value,total:teachingPages.value,cueTitle:c?.title??'Teaching',cueMessage:c?.message??bubble.value,textPreview:c?.textPreview??'',notes:presenterNotesText(),choreographyLabel:s?.label??'Manual teaching',choreographyAction:choreographyAction.value,choreographyIndex:choreographySteps.value.length?choreographyIndex.value+1:0,choreographyTotal:choreographySteps.value.length,choreographyAutoPlay:choreographyAutoPlay.value,lessonStage:currentLessonPlan.value?.stage??'concept',lessonPageRemaining:lessonPageRemaining.value,lessonDuration:currentLessonPlan.value?.durationSec??0,lessonDiscussion:currentLessonPlan.value?.discussionSec??0,assessmentActive:assessmentOpen.value,assessmentKind:currentAssessment.value?.kind??'',assessmentRemaining:assessmentRemaining.value,assessmentQuestion:currentAssessment.value?.question??'',assessmentRevealed:assessmentRevealed.value})}
+function clearChoreographyTimer(){if(choreographyTimer){clearTimeout(choreographyTimer);choreographyTimer=undefined}} function scheduleChoreographyStep(){clearChoreographyTimer();if(!choreographyAutoPlay.value||!teachingActive.value||currentLessonPlan.value?.autoAdvanceCue===false||assessmentOpen.value)return;const c=currentChoreographyStep.value;if(!c||choreographyIndex.value>=choreographySteps.value.length-1)return;choreographyTimer=window.setTimeout(()=>void nextChoreographyStep(),c.durationMs)}
+async function applyChoreographyStep(){const c=currentChoreographyStep.value;if(!c)return;choreographyAction.value=c.action;bubble.value=c.message;await syncPresenterState();scheduleChoreographyStep()} async function resetChoreography(){clearChoreographyTimer();choreographyIndex.value=0;choreographyAction.value='explain';if(currentChoreographyStep.value)await applyChoreographyStep()} async function nextChoreographyStep(){if(choreographyIndex.value>=choreographySteps.value.length-1)return;choreographyIndex.value++;await applyChoreographyStep()} async function previousChoreographyStep(){if(choreographyIndex.value<=0)return;choreographyIndex.value--;await applyChoreographyStep()} async function toggleChoreographyAutoPlay(){choreographyAutoPlay.value=!choreographyAutoPlay.value;await syncPresenterState();choreographyAutoPlay.value?scheduleChoreographyStep():clearChoreographyTimer()}
+async function startAssessment(){const a=currentAssessment.value;if(!a){bubble.value='No assessment is configured for this page.';return}clearChoreographyTimer();assessmentOpen.value=true;assessmentRemaining.value=a.countdownSec;selectedOptionId.value='';assessmentRevealed.value=false;choreographyAction.value=a.kind==='practice'?'point':'think';bubble.value=a.kind==='practice'?'Practice checkpoint! Follow the task on screen. 🛠️':'Quiz time! Choose the best answer. 🧠';await syncPresenterState()} function selectAssessment(id:string){if(!assessmentRevealed.value)selectedOptionId.value=id}
+async function revealAssessment(){const a=currentAssessment.value;if(!a)return;assessmentRevealed.value=true;const old=assessmentResults.value.find(i=>i.page===teachingPage.value),r:AssessmentResult={page:teachingPage.value,kind:a.kind,selectedOptionId:selectedOptionId.value||undefined,correct:selectedOptionId.value?selectedOptionId.value===a.correctOptionId:undefined,revealed:true,answeredAt:new Date().toISOString()};old?Object.assign(old,r):assessmentResults.value.push(r);bubble.value=r.correct===true?'Correct! Great job! 🎉':r.correct===false?'Let’s review why the highlighted answer is correct. 💡':'Answer revealed — let’s discuss it together. 💡';choreographyAction.value=r.correct===true?'celebrate':'explain';await syncPresenterState()}
+async function closeAssessment(){assessmentOpen.value=false;assessmentRemaining.value=0;if(!assessmentRevealed.value&&currentAssessment.value)assessmentResults.value.push({page:teachingPage.value,kind:currentAssessment.value.kind,selectedOptionId:selectedOptionId.value||undefined,revealed:false});await syncPresenterState();scheduleChoreographyStep()} async function setFullscreen(v:boolean){try{await getCurrentWindow().setFullscreen(v)}catch{}}
+function recordVisitedPage(){if(!visitedPages.value.includes(teachingPage.value))visitedPages.value.push(teachingPage.value);const stage=currentLessonPlan.value?.stage??'concept',e=pageTimingMap.value[teachingPage.value];e?(e.visits++,e.stage=stage):pageTimingMap.value[teachingPage.value]={page:teachingPage.value,stage,seconds:0,visits:1}}
+function recordTeachingSecond(){const stage=currentLessonPlan.value?.stage??'concept',e=pageTimingMap.value[teachingPage.value];e?(e.seconds++,e.stage=stage):pageTimingMap.value[teachingPage.value]={page:teachingPage.value,stage,seconds:1,visits:1}}
+function currentStageTimings():StageTiming[]{const m=new Map<string,number>();Object.values(pageTimingMap.value).forEach(i=>m.set(i.stage,(m.get(i.stage)??0)+i.seconds));return[...m.entries()].map(([stage,seconds])=>({stage,seconds})).sort((a,b)=>b.seconds-a.seconds)} function currentPlannedPageTimings():PlannedPageTiming[]{return(lessonFlow.value?.pages??[]).map(i=>({page:i.page,stage:i.stage,targetSec:Math.max(1,i.durationSec)}))}
+async function teachingMode(){if(teachingActive.value){clearChoreographyTimer();assessmentOpen.value=false;presentationOpen.value=false;presenterNotesOpen.value=false;await setPresenterWindowVisible(false);await setFullscreen(false);const finishedAt=new Date().toISOString();if(preparedPdf.value&&sessionStartedAt.value)saveSessionReport({pdfName:preparedPdf.value.name,startedAt:sessionStartedAt.value,finishedAt,durationSec:Math.max(0,Math.round((new Date(finishedAt).getTime()-new Date(sessionStartedAt.value).getTime())/1000)),pagesVisited:[...visitedPages.value].sort((a,b)=>a-b),assessments:assessmentResults.value,pageTimings:Object.values(pageTimingMap.value).sort((a,b)=>a.page-b.page),stageTimings:currentStageTimings(),plannedPageTimings:currentPlannedPageTimings(),discussionEvents:[...discussionEvents.value]});speak('Class finished. Teaching analytics saved locally. 🎓📊','success',true);return}petState.value='teaching';teachingPage.value=1;sessionStartedAt.value=new Date().toISOString();visitedPages.value=[];assessmentResults.value=[];pageTimingMap.value={};discussionEvents.value=[];recordVisitedPage();resetLessonPageTimer();await resetChoreography();if(preparedPdf.value){presentationOpen.value=true;presenterNotesOpen.value=!dualMonitorAvailable.value||!dualMonitorMode.value;await movePresentationToSelectedMonitor();await setFullscreen(true);if(dualMonitorMode.value&&dualMonitorAvailable.value)await setPresenterWindowVisible(true);await syncPresenterState()}else bubble.value=`Teaching mode: ${teachingTopic.value}. Use arrows to change pages. 🎓`}
+async function changeTeachingPage(delta:number){if(assessmentOpen.value)await closeAssessment();const prev=teachingPage.value;teachingPage.value=Math.max(1,Math.min(teachingPages.value,teachingPage.value+delta));if(teachingPage.value!==prev)recordVisitedPage();resetLessonPageTimer();await resetChoreography();if(!currentChoreographyStep.value){const c=currentTeachingCue.value;bubble.value=c?`Page ${teachingPage.value}/${teachingPages.value}: ${c.message}`:`Page ${teachingPage.value}/${teachingPages.value}: Continue explaining the main idea.`;await syncPresenterState()}}
+async function askClass(){clearChoreographyTimer();choreographyAction.value='think';bubble.value='Question time! What do you think about this point? ❓';await syncPresenterState()} async function startDiscussion(){clearChoreographyTimer();choreographyAction.value='discuss';const p=Math.max(0,currentLessonPlan.value?.discussionSec??0);if(teachingActive.value)discussionEvents.value.push({page:teachingPage.value,stage:currentLessonPlan.value?.stage??'discussion',startedAt:new Date().toISOString(),plannedSec:p});bubble.value=`Discussion time! ${p?`${p} seconds.`:'Discuss this idea with your group.'} 💬`;await syncPresenterState()}
+function checkAgenda(){const now=Date.now();let changed=false;for(const i of agenda.value){const d=new Date(i.startsAt).getTime()-now;if(!i.reminded&&d>0&&d<=600000){i.reminded=true;changed=true;speak(`${i.title} starts in ${Math.max(1,Math.ceil(d/60000))} minutes! 🔔`,'thinking')}}if(changed)localStorage.setItem('nyanmate-agenda',JSON.stringify(agenda.value))}
+function handleKey(e:KeyboardEvent){if(!teachingActive.value)return;if(e.key==='Escape'){assessmentOpen.value?void closeAssessment():void teachingMode();return}if(e.key.toLowerCase()==='e'){assessmentOpen.value?void closeAssessment():void startAssessment();return}if(assessmentOpen.value){if(['1','2','3','4'].includes(e.key))selectAssessment(['a','b','c','d'][Number(e.key)-1]);if(e.key.toLowerCase()==='r')void revealAssessment();return}if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();void changeTeachingPage(1)}if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();void changeTeachingPage(-1)}if(e.key.toLowerCase()==='q')void askClass();if(e.key.toLowerCase()==='d')void startDiscussion();if(e.key.toLowerCase()==='n')presenterNotesOpen.value=!presenterNotesOpen.value;if(e.key===']')void nextChoreographyStep();if(e.key==='[')void previousChoreographyStep();if(e.key.toLowerCase()==='a')void toggleChoreographyAutoPlay()}
 
-function petNyan() { if (!teachingActive.value) speak('Prrrr… thank you! ♡', 'success', true) }
-
-function addAgenda() {
-  if (!newTitle.value || !newTime.value) return
-  agenda.value.push({ id: crypto.randomUUID(), title: newTitle.value, startsAt: newTime.value, reminded: false })
-  agenda.value.sort((a, b) => a.startsAt.localeCompare(b.startsAt))
-  localStorage.setItem('nyanmate-agenda', JSON.stringify(agenda.value))
-  speak(`Agenda saved: ${newTitle.value} 📅`, 'success', true)
-  newTitle.value = ''; newTime.value = ''
-}
-
-function removeAgenda(id: string) { agenda.value = agenda.value.filter(item => item.id !== id); localStorage.setItem('nyanmate-agenda', JSON.stringify(agenda.value)) }
-function toggleFocus() { focusRunning.value = !focusRunning.value; speak(focusRunning.value ? 'Focus time! I’ll stay with you. 🍅' : 'Focus paused.', focusRunning.value ? 'coding' : 'idle') }
-function resetLessonPageTimer() { lessonPageRemaining.value = currentLessonPlan.value?.durationSec ?? 0 }
-function handleLessonFlowChange(flow: LessonFlowConfig) { lessonFlow.value = flow; resetLessonPageTimer() }
-function handleAssessmentChange(config: AssessmentConfig) { assessmentConfig.value = config }
-
-function handlePdfPrepared(pdf: PreparedPdf) {
-  preparedPdf.value = pdf
-  teachingTopic.value = pdf.name
-  teachingPages.value = pdf.pageCount
-  teachingPage.value = 1
-  choreographyIndex.value = 0
-  lessonFlow.value = loadLessonFlow(pdf.name) ?? createDefaultLessonFlow(pdf.name, pdf.cues, pdf.pageCount)
-  assessmentConfig.value = loadAssessmentConfig(pdf.name)
-  resetLessonPageTimer()
-  bubble.value = `PDF ready: ${pdf.name} · ${pdf.pageCount} pages. Lesson flow + assessments ready. 🧭🧠`
-}
-
-function handlePreparedCue(cue: TeachingCue) { teachingPage.value = cue.page; choreographyIndex.value = 0; assessmentOpen.value = false; resetLessonPageTimer(); bubble.value = `Page ${cue.page}: ${cue.message}` }
-
-async function detectMonitors() {
-  try {
-    const monitors = await availableMonitors()
-    monitorNames.value = monitors.map((monitor, index) => monitor.name || `Display ${index + 1}`)
-    if (projectorMonitorIndex.value >= monitors.length) projectorMonitorIndex.value = Math.max(0, monitors.length - 1)
-  } catch { monitorNames.value = ['Current display'] }
-}
-
-async function movePresentationToSelectedMonitor() {
-  if (!dualMonitorMode.value || !dualMonitorAvailable.value) return
-  try {
-    const monitors = await availableMonitors(); const target = monitors[projectorMonitorIndex.value]; if (!target) return
-    const current = getCurrentWindow(); await current.setFullscreen(false); await current.setPosition(target.position); await current.setSize(target.size)
-  } catch { /* fallback current monitor */ }
-}
-
-async function setPresenterWindowVisible(visible: boolean) { try { await invoke('set_presenter_visible', { visible }) } catch { /* browser preview */ } }
-function presenterNotesText() { const auto = currentTeachingCue.value?.presenterNote ?? ''; const custom = localStorage.getItem(`nyanmate-note-${teachingPage.value}`) ?? ''; return [auto, currentLessonPlan.value?.note, custom].filter(Boolean).join('\n\n') }
-
-async function syncPresenterState() {
-  const cue = currentTeachingCue.value; const choreo = currentChoreographyStep.value
-  await emit('presenter-state', {
-    active: builtInPresentation.value, topic: teachingTopic.value, page: teachingPage.value, total: teachingPages.value,
-    cueTitle: cue?.title ?? 'Teaching', cueMessage: cue?.message ?? bubble.value, textPreview: cue?.textPreview ?? '', notes: presenterNotesText(),
-    choreographyLabel: choreo?.label ?? 'Manual teaching', choreographyAction: choreographyAction.value,
-    choreographyIndex: choreographySteps.value.length ? choreographyIndex.value + 1 : 0, choreographyTotal: choreographySteps.value.length,
-    choreographyAutoPlay: choreographyAutoPlay.value,
-    lessonStage: currentLessonPlan.value?.stage ?? 'concept', lessonPageRemaining: lessonPageRemaining.value,
-    lessonDuration: currentLessonPlan.value?.durationSec ?? 0, lessonDiscussion: currentLessonPlan.value?.discussionSec ?? 0,
-    assessmentActive: assessmentOpen.value, assessmentKind: currentAssessment.value?.kind ?? '', assessmentRemaining: assessmentRemaining.value,
-    assessmentQuestion: currentAssessment.value?.question ?? '', assessmentRevealed: assessmentRevealed.value,
-  })
-}
-
-function clearChoreographyTimer() { if (choreographyTimer) { clearTimeout(choreographyTimer); choreographyTimer = undefined } }
-function scheduleChoreographyStep() {
-  clearChoreographyTimer()
-  if (!choreographyAutoPlay.value || !teachingActive.value || currentLessonPlan.value?.autoAdvanceCue === false || assessmentOpen.value) return
-  const current = currentChoreographyStep.value
-  if (!current || choreographyIndex.value >= choreographySteps.value.length - 1) return
-  choreographyTimer = window.setTimeout(() => { void nextChoreographyStep() }, current.durationMs)
-}
-async function applyChoreographyStep() { const current = currentChoreographyStep.value; if (!current) return; choreographyAction.value = current.action; bubble.value = current.message; await syncPresenterState(); scheduleChoreographyStep() }
-async function resetChoreography() { clearChoreographyTimer(); choreographyIndex.value = 0; choreographyAction.value = 'explain'; if (currentChoreographyStep.value) await applyChoreographyStep() }
-async function nextChoreographyStep() { if (choreographyIndex.value >= choreographySteps.value.length - 1) return; choreographyIndex.value += 1; await applyChoreographyStep() }
-async function previousChoreographyStep() { if (choreographyIndex.value <= 0) return; choreographyIndex.value -= 1; await applyChoreographyStep() }
-async function toggleChoreographyAutoPlay() { choreographyAutoPlay.value = !choreographyAutoPlay.value; await syncPresenterState(); if (choreographyAutoPlay.value) scheduleChoreographyStep(); else clearChoreographyTimer() }
-
-async function startAssessment() {
-  const assessment = currentAssessment.value
-  if (!assessment) { bubble.value = 'No assessment is configured for this page.'; return }
-  clearChoreographyTimer()
-  assessmentOpen.value = true
-  assessmentRemaining.value = assessment.countdownSec
-  selectedOptionId.value = ''
-  assessmentRevealed.value = false
-  choreographyAction.value = assessment.kind === 'practice' ? 'point' : 'think'
-  bubble.value = assessment.kind === 'practice' ? 'Practice checkpoint! Follow the task on screen. 🛠️' : 'Quiz time! Choose the best answer. 🧠'
-  await syncPresenterState()
-}
-
-function selectAssessment(id: string) { if (!assessmentRevealed.value) selectedOptionId.value = id }
-
-async function revealAssessment() {
-  const assessment = currentAssessment.value
-  if (!assessment) return
-  assessmentRevealed.value = true
-  const existing = assessmentResults.value.find(item => item.page === teachingPage.value)
-  const result: AssessmentResult = {
-    page: teachingPage.value,
-    kind: assessment.kind,
-    selectedOptionId: selectedOptionId.value || undefined,
-    correct: selectedOptionId.value ? selectedOptionId.value === assessment.correctOptionId : undefined,
-    revealed: true,
-    answeredAt: new Date().toISOString(),
-  }
-  if (existing) Object.assign(existing, result); else assessmentResults.value.push(result)
-  bubble.value = result.correct === true ? 'Correct! Great job! 🎉' : result.correct === false ? 'Let’s review why the highlighted answer is correct. 💡' : 'Answer revealed — let’s discuss it together. 💡'
-  choreographyAction.value = result.correct === true ? 'celebrate' : 'explain'
-  await syncPresenterState()
-}
-
-async function closeAssessment() {
-  assessmentOpen.value = false
-  assessmentRemaining.value = 0
-  if (!assessmentRevealed.value && currentAssessment.value) {
-    assessmentResults.value.push({ page: teachingPage.value, kind: currentAssessment.value.kind, selectedOptionId: selectedOptionId.value || undefined, revealed: false })
-  }
-  await syncPresenterState()
-  scheduleChoreographyStep()
-}
-
-async function setFullscreen(value: boolean) { try { await getCurrentWindow().setFullscreen(value) } catch { /* Browser preview */ } }
-
-function recordVisitedPage() {
-  if (!visitedPages.value.includes(teachingPage.value)) visitedPages.value.push(teachingPage.value)
-  const stage = currentLessonPlan.value?.stage ?? 'concept'
-  const existing = pageTimingMap.value[teachingPage.value]
-  if (existing) {
-    existing.visits += 1
-    existing.stage = stage
-  } else {
-    pageTimingMap.value[teachingPage.value] = { page: teachingPage.value, stage, seconds: 0, visits: 1 }
-  }
-}
-
-function recordTeachingSecond() {
-  const stage = currentLessonPlan.value?.stage ?? 'concept'
-  const existing = pageTimingMap.value[teachingPage.value]
-  if (existing) {
-    existing.seconds += 1
-    existing.stage = stage
-  } else {
-    pageTimingMap.value[teachingPage.value] = { page: teachingPage.value, stage, seconds: 1, visits: 1 }
-  }
-}
-
-function currentStageTimings(): StageTiming[] {
-  const stageMap = new Map<string, number>()
-  Object.values(pageTimingMap.value).forEach(item => stageMap.set(item.stage, (stageMap.get(item.stage) ?? 0) + item.seconds))
-  return [...stageMap.entries()].map(([stage, seconds]) => ({ stage, seconds })).sort((a, b) => b.seconds - a.seconds)
-}
-
-function currentPlannedPageTimings(): PlannedPageTiming[] {
-  return (lessonFlow.value?.pages ?? []).map(item => ({ page: item.page, stage: item.stage, targetSec: Math.max(1, item.durationSec) }))
-}
-
-async function teachingMode() {
-  if (teachingActive.value) {
-    clearChoreographyTimer(); assessmentOpen.value = false; presentationOpen.value = false; presenterNotesOpen.value = false; await setPresenterWindowVisible(false); await setFullscreen(false)
-    const finishedAt = new Date().toISOString()
-    if (preparedPdf.value && sessionStartedAt.value) {
-      saveSessionReport({
-        pdfName: preparedPdf.value.name,
-        startedAt: sessionStartedAt.value,
-        finishedAt,
-        durationSec: Math.max(0, Math.round((new Date(finishedAt).getTime() - new Date(sessionStartedAt.value).getTime()) / 1000)),
-        pagesVisited: [...visitedPages.value].sort((a, b) => a - b),
-        assessments: assessmentResults.value,
-        pageTimings: Object.values(pageTimingMap.value).sort((a, b) => a.page - b.page),
-        stageTimings: currentStageTimings(),
-        plannedPageTimings: currentPlannedPageTimings(),
-        discussionEvents: [...discussionEvents.value],
-      })
-    }
-    speak('Class finished. Plan vs actual + discussion history saved locally. 🎓📊', 'success', true); choreographyAction.value = 'celebrate'; await syncPresenterState()
-  } else {
-    teachingPage.value = 1; petState.value = 'teaching'; presentationOpen.value = Boolean(preparedPdf.value); resetLessonPageTimer()
-    sessionStartedAt.value = new Date().toISOString(); visitedPages.value = []; assessmentResults.value = []; pageTimingMap.value = {}; discussionEvents.value = []; recordVisitedPage()
-    if (presentationOpen.value) { await detectMonitors(); await movePresentationToSelectedMonitor(); await setFullscreen(true); if (dualMonitorMode.value && dualMonitorAvailable.value) await setPresenterWindowVisible(true) }
-    if (currentTeachingCue.value) await resetChoreography(); else bubble.value = `Teaching mode ready: ${teachingTopic.value}. 🎓`
-    await syncPresenterState()
-  }
-  menuOpen.value = false
-}
-
-async function changeTeachingPage(delta: number) {
-  if (assessmentOpen.value) await closeAssessment()
-  const previousPage = teachingPage.value
-  teachingPage.value = Math.max(1, Math.min(teachingPages.value, teachingPage.value + delta))
-  if (teachingPage.value !== previousPage) recordVisitedPage()
-  resetLessonPageTimer(); await resetChoreography()
-  if (!currentChoreographyStep.value) { const cue = currentTeachingCue.value; bubble.value = cue ? `Page ${teachingPage.value}/${teachingPages.value}: ${cue.message}` : `Page ${teachingPage.value}/${teachingPages.value}: Continue explaining the main idea.`; await syncPresenterState() }
-}
-
-async function askClass() { clearChoreographyTimer(); choreographyAction.value = 'think'; bubble.value = 'Question time! What do you think about this point? ❓'; await syncPresenterState() }
-async function startDiscussion() {
-  clearChoreographyTimer()
-  choreographyAction.value = 'discuss'
-  const plannedSec = Math.max(0, currentLessonPlan.value?.discussionSec ?? 0)
-  if (teachingActive.value) discussionEvents.value.push({ page: teachingPage.value, stage: currentLessonPlan.value?.stage ?? 'discussion', startedAt: new Date().toISOString(), plannedSec })
-  bubble.value = `Discussion time! ${plannedSec ? `${plannedSec} seconds.` : 'Discuss this idea with your group.'} 💬`
-  await syncPresenterState()
-}
-
-function checkAgenda() {
-  const now = Date.now(); let changed = false
-  for (const item of agenda.value) { const diff = new Date(item.startsAt).getTime() - now; if (!item.reminded && diff > 0 && diff <= 10 * 60 * 1000) { item.reminded = true; changed = true; speak(`${item.title} starts in ${Math.max(1, Math.ceil(diff / 60000))} minutes! 🔔`, 'thinking') } }
-  if (changed) localStorage.setItem('nyanmate-agenda', JSON.stringify(agenda.value))
-}
-
-function handleKey(event: KeyboardEvent) {
-  if (!teachingActive.value) return
-  if (event.key === 'Escape') { if (assessmentOpen.value) void closeAssessment(); else void teachingMode(); return }
-  if (event.key.toLowerCase() === 'e') { if (assessmentOpen.value) void closeAssessment(); else void startAssessment(); return }
-  if (assessmentOpen.value) {
-    if (['1','2','3','4'].includes(event.key)) selectAssessment(['a','b','c','d'][Number(event.key) - 1])
-    if (event.key.toLowerCase() === 'r') void revealAssessment()
-    return
-  }
-  if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') { event.preventDefault(); void changeTeachingPage(1) }
-  if (event.key === 'ArrowLeft' || event.key === 'PageUp') { event.preventDefault(); void changeTeachingPage(-1) }
-  if (event.key.toLowerCase() === 'q') void askClass(); if (event.key.toLowerCase() === 'd') void startDiscussion(); if (event.key.toLowerCase() === 'n') presenterNotesOpen.value = !presenterNotesOpen.value
-  if (event.key === ']') void nextChoreographyStep(); if (event.key === '[') void previousChoreographyStep(); if (event.key.toLowerCase() === 'a') void toggleChoreographyAutoPlay()
-}
-
-onMounted(async () => {
-  window.addEventListener('keydown', handleKey); await detectMonitors()
-  unlistenControl = await listen<{ action: string }>('presenter-control', (event) => {
-    const action = event.payload.action
-    if (action === 'prev') void changeTeachingPage(-1); if (action === 'next') void changeTeachingPage(1); if (action === 'question') void askClass(); if (action === 'discussion') void startDiscussion()
-    if (action === 'assessment') void startAssessment(); if (action === 'reveal') void revealAssessment(); if (action === 'assessment-close') void closeAssessment()
-    if (action === 'cue-prev') void previousChoreographyStep(); if (action === 'cue-next') void nextChoreographyStep(); if (action === 'auto') void toggleChoreographyAutoPlay(); if (action === 'end') void teachingMode()
-  })
-  unlistenReady = await listen('presenter-ready', () => { void syncPresenterState() })
-  timer = window.setInterval(() => {
-    checkAgenda()
-    if (focusRunning.value && focusSeconds.value > 0) focusSeconds.value--
-    if (focusRunning.value && focusSeconds.value === 0) { focusRunning.value = false; focusSeconds.value = 25 * 60; speak('Focus session complete! Great work! 🎉', 'success', true) }
-    if (teachingActive.value) recordTeachingSecond()
-    if (teachingActive.value && lessonPageRemaining.value > 0) { lessonPageRemaining.value--; if (lessonPageRemaining.value % 5 === 0) void syncPresenterState() }
-    if (assessmentOpen.value && assessmentRemaining.value > 0) {
-      assessmentRemaining.value--
-      if (assessmentRemaining.value === 0) { bubble.value = 'Time is up — reveal and discuss the answer. ⏰'; void syncPresenterState() }
-      else if (assessmentRemaining.value % 5 === 0) void syncPresenterState()
-    }
-  }, 1000)
-})
-
-onUnmounted(() => { window.removeEventListener('keydown', handleKey); unlistenControl?.(); unlistenReady?.(); clearChoreographyTimer(); if (timer) clearInterval(timer); if (bubbleReset) clearTimeout(bubbleReset) })
+onMounted(async()=>{window.addEventListener('keydown',handleKey);await detectMonitors();unlistenAgent=await listen<CodingAgentEvent>('coding-agent-status',e=>handleAgentStatus(normalizeAgentEvent(e.payload)));unlistenControl=await listen<{action:string}>('presenter-control',e=>{const a=e.payload.action;if(a==='prev')void changeTeachingPage(-1);if(a==='next')void changeTeachingPage(1);if(a==='question')void askClass();if(a==='discussion')void startDiscussion();if(a==='assessment')void startAssessment();if(a==='reveal')void revealAssessment();if(a==='assessment-close')void closeAssessment();if(a==='cue-prev')void previousChoreographyStep();if(a==='cue-next')void nextChoreographyStep();if(a==='auto')void toggleChoreographyAutoPlay();if(a==='end')void teachingMode()});unlistenReady=await listen('presenter-ready',()=>void syncPresenterState());timer=window.setInterval(()=>{checkAgenda();if(focusRunning.value&&focusSeconds.value>0)focusSeconds.value--;if(focusRunning.value&&focusSeconds.value===0){focusRunning.value=false;focusSeconds.value=1500;speak('Focus session complete! Great work! 🎉','success',true)}if(teachingActive.value)recordTeachingSecond();if(teachingActive.value&&lessonPageRemaining.value>0){lessonPageRemaining.value--;if(lessonPageRemaining.value%5===0)void syncPresenterState()}if(assessmentOpen.value&&assessmentRemaining.value>0){assessmentRemaining.value--;if(assessmentRemaining.value===0){bubble.value='Time is up — reveal and discuss the answer. ⏰';void syncPresenterState()}else if(assessmentRemaining.value%5===0)void syncPresenterState()}},1000)})
+onUnmounted(()=>{window.removeEventListener('keydown',handleKey);unlistenControl?.();unlistenReady?.();unlistenAgent?.();clearChoreographyTimer();if(timer)clearInterval(timer);if(bubbleReset)clearTimeout(bubbleReset)})
 </script>
 
-<template>
-  <main class="desktop" :class="{ teaching: teachingActive, presenting: builtInPresentation }">
-    <template v-if="builtInPresentation && preparedPdf">
-      <PdfPresentationStage :pdf="preparedPdf" :page="teachingPage" @error="bubble = $event" />
-      <div v-if="choreographyAction === 'point'" class="presentation-target" :style="pointStyle" :title="currentTeachingCue?.focusLabel || 'NyanMate focus target'"><span></span></div>
-      <div class="presentation-topbar">
-        <strong>🎓 {{ teachingTopic }}</strong>
-        <span>{{ teachingPage }} / {{ teachingPages }} · {{ currentLessonPlan?.stage || currentTeachingCue?.title || 'Teaching' }} · ⏱ {{ lessonTimeText }}</span>
-        <button v-if="!dualMonitorAvailable || !dualMonitorMode" @click="presenterNotesOpen=!presenterNotesOpen">Notes · N</button><button @click="teachingMode">End · Esc</button>
-      </div>
-      <PresenterNotes v-if="presenterNotesOpen && (!dualMonitorAvailable || !dualMonitorMode)" :cue="currentTeachingCue" :page="teachingPage" :total="teachingPages" />
-      <div class="presentation-nav"><button :disabled="teachingPage <= 1" @click="changeTeachingPage(-1)">←</button><button @click="askClass">❓</button><button @click="startDiscussion">💬</button><button v-if="currentAssessment" @click="startAssessment">🧠</button><button :disabled="teachingPage >= teachingPages" @click="changeTeachingPage(1)">→</button></div>
-      <AssessmentOverlay v-if="assessmentOpen && currentAssessment" :assessment="currentAssessment" :remaining="assessmentRemaining" :selected-option-id="selectedOptionId" :revealed="assessmentRevealed" @select="selectAssessment" @reveal="revealAssessment" @close="closeAssessment" />
-      <TeachingChoreography v-if="choreographySteps.length && !assessmentOpen" :steps="choreographySteps" :index="choreographyIndex" :auto-play="choreographyAutoPlay" @previous="previousChoreographyStep" @next="nextChoreographyStep" @toggle-auto="toggleChoreographyAutoPlay" />
-      <div class="teaching-pet-overlay" :class="[petSide, `choreo-${choreographyAction}`]"><div class="presentation-bubble">{{ bubble }}</div><NyanPet :state="petState" :draggable="false" :pointer-direction="pointerDirection" :choreography-action="choreographyAction" @pet="petNyan" /></div>
-    </template>
-
-    <template v-else>
-      <section v-if="menuOpen" class="panel">
-        <header><strong>NyanMate v0.14</strong><button @click="menuOpen=false">×</button></header>
-        <PdfTeachingPanel @prepared="handlePdfPrepared" @cue="handlePreparedCue" />
-        <LessonFlowEditor :pdf="preparedPdf" @change="handleLessonFlowChange" />
-        <AssessmentEditor :pdf="preparedPdf" @change="handleAssessmentChange" />
-        <div class="section dual-monitor-setup"><h3>🖥️ Presenter display</h3><label class="dual-toggle"><input v-model="dualMonitorMode" type="checkbox" /> Use private presenter console when two displays are available</label><select v-if="monitorNames.length > 1" v-model.number="projectorMonitorIndex"><option v-for="(name, index) in monitorNames" :key="name + index" :value="index">Projector: {{ name }}</option></select><small>{{ dualMonitorAvailable ? `${monitorNames.length} displays detected. Presenter Console will remain separate from the projected PDF.` : 'One display detected. NyanMate will use same-screen presenter notes.' }}</small></div>
-        <div class="section teaching-setup"><h3>🎬 Teaching choreography</h3><label class="dual-toggle"><input v-model="choreographyAutoPlay" type="checkbox" /> Auto-play gestures and teaching cues on enabled pages</label><small>`[` previous cue · `]` next cue · `A` auto-play on/off.</small></div>
-        <div class="section"><h3>📅 Quick agenda</h3><input v-model="newTitle" placeholder="Agenda title" /><input v-model="newTime" type="datetime-local" /><button class="primary" @click="addAgenda">Add agenda</button><div v-if="agenda.length" class="agenda-list"><div v-for="item in agenda.slice(0, 3)" :key="item.id" class="agenda-row"><span>{{ item.title }}<small>{{ new Date(item.startsAt).toLocaleString() }}</small></span><button @click="removeAgenda(item.id)">×</button></div></div></div>
-        <div class="section teaching-setup"><h3>🎓 Teaching companion</h3><input v-model="teachingTopic" placeholder="Presentation/PDF title" /><div class="page-config"><span>Pages</span><input v-model.number="teachingPages" type="number" min="1" max="999" /></div><small v-if="preparedPdf" class="prepared-note">✓ Plan vs actual + discussion history + teaching insights ready.</small></div>
-        <div class="actions"><button @click="teachingMode">🎓 {{ preparedPdf ? 'Present PDF' : 'Start teaching' }}</button><button @click="speak('Thinking with your AI agent…', 'thinking')">🤖 Agent demo</button><button @click="speak('Build completed successfully!', 'success', true)">✓ Success demo</button><button @click="speak('Oops — something needs attention.', 'error', true)">⚠ Error demo</button></div>
-      </section>
-      <div v-if="teachingActive" class="teaching-hud"><strong>🎓 {{ teachingTopic }}</strong><span>Page {{ teachingPage }} / {{ teachingPages }}</span><div><button @click="changeTeachingPage(-1)">←</button><button @click="askClass">❓</button><button @click="startDiscussion">💬</button><button @click="changeTeachingPage(1)">→</button><button @click="teachingMode">End</button></div></div>
-      <div class="bubble">{{ bubble }}</div><NyanPet :state="petState" @pet="petNyan" @menu="menuOpen=!menuOpen" /><div class="status-strip"><button class="focus" @click="toggleFocus">🍅 {{ focusText }} {{ focusRunning ? 'Ⅱ' : '▶' }}</button><span v-if="nextAgenda" class="next-agenda">📅 {{ nextAgenda.title }}</span></div>
-    </template>
-  </main>
-</template>
+<template><main class="desktop" :class="{teaching:teachingActive,presenting:builtInPresentation}"><template v-if="builtInPresentation&&preparedPdf"><PdfPresentationStage :pdf="preparedPdf" :page="teachingPage" @error="bubble=$event"/><div v-if="choreographyAction==='point'" class="presentation-target" :style="pointStyle"><span></span></div><div class="presentation-topbar"><strong>🎓 {{teachingTopic}}</strong><span>{{teachingPage}} / {{teachingPages}} · {{currentLessonPlan?.stage||'Teaching'}} · ⏱ {{lessonTimeText}}</span><button v-if="!dualMonitorAvailable||!dualMonitorMode" @click="presenterNotesOpen=!presenterNotesOpen">Notes · N</button><button @click="teachingMode">End · Esc</button></div><PresenterNotes v-if="presenterNotesOpen&&(!dualMonitorAvailable||!dualMonitorMode)" :cue="currentTeachingCue" :page="teachingPage" :total="teachingPages"/><div class="presentation-nav"><button @click="changeTeachingPage(-1)">←</button><button @click="askClass">❓</button><button @click="startDiscussion">💬</button><button v-if="currentAssessment" @click="startAssessment">🧠</button><button @click="changeTeachingPage(1)">→</button></div><AssessmentOverlay v-if="assessmentOpen&&currentAssessment" :assessment="currentAssessment" :remaining="assessmentRemaining" :selected-option-id="selectedOptionId" :revealed="assessmentRevealed" @select="selectAssessment" @reveal="revealAssessment" @close="closeAssessment"/><TeachingChoreography v-if="choreographySteps.length&&!assessmentOpen" :steps="choreographySteps" :index="choreographyIndex" :auto-play="choreographyAutoPlay" @previous="previousChoreographyStep" @next="nextChoreographyStep" @toggle-auto="toggleChoreographyAutoPlay"/><div class="teaching-pet-overlay" :class="[petSide,`choreo-${choreographyAction}`]"><div class="presentation-bubble">{{bubble}}</div><NyanPet :state="petState" :draggable="false" :pointer-direction="pointerDirection" :choreography-action="choreographyAction" @pet="petNyan"/></div></template><template v-else><section v-if="menuOpen" class="panel"><header><strong>NyanMate v0.18</strong><button @click="menuOpen=false">×</button></header><CodingCompanionPanel :status="agentStatus" @status="handleAgentStatus"/><PdfTeachingPanel @prepared="handlePdfPrepared" @cue="handlePreparedCue"/><LessonFlowEditor :pdf="preparedPdf" @change="handleLessonFlowChange"/><AssessmentEditor :pdf="preparedPdf" @change="handleAssessmentChange"/><div class="section"><h3>📅 Quick agenda</h3><input v-model="newTitle" placeholder="Agenda title"/><input v-model="newTime" type="datetime-local"/><button class="primary" @click="addAgenda">Add agenda</button></div><div class="actions"><button @click="teachingMode">🎓 {{preparedPdf?'Present PDF':'Start teaching'}}</button><button @click="handleAgentStatus({agent:'OpenCode',state:'thinking'})">🤖 Agent demo</button></div></section><div v-if="teachingActive" class="teaching-hud"><strong>🎓 {{teachingTopic}}</strong><span>Page {{teachingPage}} / {{teachingPages}}</span><div><button @click="changeTeachingPage(-1)">←</button><button @click="askClass">❓</button><button @click="startDiscussion">💬</button><button @click="changeTeachingPage(1)">→</button><button @click="teachingMode">End</button></div></div><div class="bubble">{{bubble}}</div><NyanPet :state="petState" @pet="petNyan" @menu="menuOpen=!menuOpen"/><div v-if="agentStatus&&!teachingActive" class="agent-live-badge">🤖 {{agentStatus.agent}} · {{agentStatus.state}}</div><div class="status-strip"><button class="focus" @click="toggleFocus">🍅 {{focusText}} {{focusRunning?'Ⅱ':'▶'}}</button><span v-if="nextAgenda" class="next-agenda">📅 {{nextAgenda.title}}</span></div></template></main></template>

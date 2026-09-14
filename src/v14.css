@@ -1,0 +1,58 @@
+.plan-actual-section .analytics-head,
+.discussion-history .analytics-head { margin-bottom: 12px; }
+
+.plan-actual-table { display: grid; gap: 8px; }
+.plan-actual-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.4fr) repeat(3, minmax(86px, .7fr)) 88px;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px;
+  background: rgba(255,255,255,.035);
+}
+.plan-actual-row > div,
+.plan-actual-row > span { display: grid; gap: 3px; }
+.plan-actual-row small { opacity: .66; }
+.plan-actual-row em {
+  justify-self: end;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+}
+.plan-over .variance b { font-weight: 800; }
+.plan-under .variance b { opacity: .85; }
+.plan-on-target { border-color: rgba(255,255,255,.18); }
+
+.discussion-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+.discussion-grid article {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.035);
+}
+.discussion-grid article > span { font-size: 14px; font-weight: 700; }
+.discussion-grid small { opacity: .7; line-height: 1.35; }
+.session-timing-row.discussion-row { grid-template-columns: 1fr .8fr .7fr 1fr; }
+
+@media (max-width: 780px) {
+  .plan-actual-row { grid-template-columns: 1fr 1fr; }
+  .plan-actual-row em { justify-self: start; }
+}
+
+@media print {
+  .plan-actual-section,
+  .discussion-history { break-inside: avoid; }
+  .plan-actual-row,
+  .discussion-grid article { border-color: #bbb; background: transparent; }
+}

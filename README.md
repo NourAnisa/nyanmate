@@ -14,6 +14,7 @@ The goal is to combine a living desktop pet with productivity tools, teaching/pr
 - Built-in PDF Teaching Mode
 - Dual-monitor presenter console
 - Semantic PDF focus targeting
+- Timed teaching choreography
 - Speech bubbles and status reactions
 - Extensible AI-agent state model (OpenCode, Codex, Claude Code, Cursor, Kiro, etc.)
 - Local-first architecture; heavier AI features are intended to be opt-in and loaded on demand
@@ -37,30 +38,33 @@ NyanMate estimates text density on the left and right side of every PDF page, ch
 NyanMate includes a dedicated **Presenter Console** window. With multiple displays, you can select the projector display, while a separate presenter window stays on the lecturer screen with synchronized page state, cues, notes, and remote presentation controls.
 
 ### v0.7 — semantic focus targeting
-The PDF analyzer now builds normalized text boxes from the PDF text layer and classifies each page into teaching-oriented content types. It searches for the most relevant text/caption region for that type, rather than simply targeting the largest text item.
+The PDF analyzer builds normalized text boxes from the PDF text layer and classifies each page into teaching-oriented content types. It searches for relevant title, key-point, diagram/table, visual/image, formula, code, question, or summary regions, and computes a safe mascot side, target region, pointer point, focus label, and confidence score.
 
-Current semantic target categories include **title, text/key points, diagram/table, visual/image, formula/metric, code, question, and summary**. Image-heavy pages are detected through PDF.js drawing operators when the text layer is sparse. Each page receives a focus label, normalized target region, confidence score, safe mascot side, pointer target, and presenter note that references the intended focus area.
+### v0.8 — teaching choreography
+NyanMate now has a page-level choreography state machine. Each prepared page is converted into a short sequence of teaching actions such as **enter, greet, explain, point, think, discuss, summarize, and celebrate**. The action sequence drives the mascot animation and speech bubble while keeping the semantic PDF focus target from v0.7.
 
-The PDF preparation panel exposes the detected focus label, focus kind, confidence, and mascot side so the lecturer can inspect the analysis before presenting. The projected focus marker continues to use the computed target point.
+Auto-play can advance through the choreography steps using each step's local timer. It deliberately does **not** auto-advance to the next PDF page, so the lecturer remains in control of presentation pacing. The projected window includes a compact choreography controller, and the private Presenter Console mirrors the active action and can move to the previous/next cue or toggle Auto mode remotely.
 
-This is still a lightweight heuristic system: PDF text and drawing operators do not provide full semantic understanding of every embedded chart or image. Precise object segmentation and computer-vision-based recognition are future opt-in features so the default application remains lightweight and local-first.
+Presentation controls:
 
-Controls:
-
-- `→`, `PageDown`, or `Space`: next page
-- `←` or `PageUp`: previous page
+- `→`, `PageDown`, or `Space`: next PDF page
+- `←` or `PageUp`: previous PDF page
 - `Q`: question prompt
 - `D`: discussion prompt
 - `N`: toggle same-screen presenter notes when dual-monitor mode is unavailable/off
+- `[` / `]`: previous / next choreography cue
+- `A`: toggle choreography Auto mode
 - `Esc`: end presentation
 
 Monitor routing depends on the operating system and connected display topology. Users should verify the selected projector display before class. External Adobe Reader/browser page tracking is not implemented yet; the reliable path is the built-in NyanMate presentation surface.
+
+The semantic targeting layer remains heuristic and local-first. PDF text and drawing operators do not provide full visual understanding of every embedded chart or image, so richer computer-vision analysis remains an optional future layer rather than a default background process.
 
 ## Planned modules
 
 1. **Living Desktop Pet** — idle, walk, sleep, petting, keyboard/mouse reactions, customization.
 2. **Smart Agenda** — daily brief, recurring reminders, countdowns, calendar integration.
-3. **Teaching Companion** — PDF/PPT/Slides presentation mode, semantic pointer targeting, quiz/discussion timers, dual-display presenter console.
+3. **Teaching Companion** — PDF/PPT/Slides presentation mode, semantic pointer targeting, teaching choreography, quiz/discussion timers, dual-display presenter console.
 4. **AI Coding Companion** — normalized state adapters for OpenCode, Codex CLI, Claude Code, Cursor, Kiro, Antigravity.
 5. **AI Assistant** — floating chat, drop-a-file actions, screenshot/document assistance.
 6. **Plugin Ecosystem** — pet packs, animations, integrations and agent adapters.
@@ -86,9 +90,9 @@ npm run dev
 
 ## Current status
 
-**v0.7.x prototype** includes the mascot, pet interaction, agenda reminders, Pomodoro, system tray, local PDF preparation, fullscreen PDF presentation, synchronized navigation, safe-side placement, presenter notes, display routing, dual-monitor Presenter Console, semantic content classification, PDF image-operator detection, target-region selection, confidence scoring, and improved pointer targeting.
+**v0.8.x prototype** includes the mascot, pet interaction, agenda reminders, Pomodoro, system tray, local PDF preparation, fullscreen presentation, synchronized navigation, safe-side placement, presenter notes, dual-monitor Presenter Console, semantic PDF target selection, and timed page-level teaching choreography with manual and Auto controls.
 
-The next teaching milestone is an optional richer visual-analysis layer for embedded diagrams/images, plus slide-level teaching choreography such as timed emphasis, automatic question pauses, and end-of-class summaries.
+The next teaching milestone is configurable lesson flow: custom pause durations, discussion countdowns, per-page choreography editing, and an optional lesson-plan layer that can group pages into opening, explanation, activity, assessment, and closing sections.
 
 ## Design principles
 
@@ -96,6 +100,7 @@ The next teaching milestone is an optional richer visual-analysis layer for embe
 - Event-driven instead of constant polling
 - Local-first and privacy-conscious
 - Heavy AI/vision modules run only when requested
+- Lecturer remains in control of page transitions
 - Original visuals and behavior; NyanMate is not a copy of any third-party character assets
 
 ## License

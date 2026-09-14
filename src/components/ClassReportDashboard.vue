@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import {
+  aggregatePageAnalytics,
+  aggregateStageAnalytics,
   loadReportHistory,
   loadReportIndex,
   reportsToCsv,
@@ -17,7 +19,11 @@ const selectedIndex = ref(0)
 
 const activePdf = computed(() => props.pdfName || selectedPdf.value)
 const summary = computed(() => summarizeReports(reports.value))
+const pageAnalytics = computed(() => aggregatePageAnalytics(reports.value))
+const stageAnalytics = computed(() => aggregateStageAnalytics(reports.value))
 const selectedReport = computed(() => reports.value[selectedIndex.value] ?? null)
+const maxPageAverage = computed(() => Math.max(1, ...pageAnalytics.value.map(item => item.averageSec)))
+const maxStageTotal = computed(() => Math.max(1, ...stageAnalytics.value.map(item => item.totalSec)))
 const durationText = (seconds: number) => `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 
 function load() {
@@ -54,7 +60,7 @@ watch(() => props.pdfName, load, { immediate: true })
     <section class="report-dashboard">
       <div class="report-dashboard-head">
         <div>
-          <small>📊 NyanMate Class Report Dashboard</small>
+          <small>📊 NyanMate Teaching Analytics</small>
           <h3>{{ activePdf || 'No class reports yet' }}</h3>
         </div>
         <div class="report-actions">
@@ -82,6 +88,28 @@ watch(() => props.pdfName, load, { immediate: true })
           <article><small>Akurasi</small><strong>{{ summary.accuracyPercent == null ? '—' : `${summary.accuracyPercent}%` }}</strong></article>
         </div>
 
+        <section class="analytics-section" v-if="pageAnalytics.length">
+          <div class="analytics-head"><div><small>⏱ Page analytics</small><h4>Waktu rata-rata per halaman</h4></div><span>{{ pageAnalytics.length }} pages tracked</span></div>
+          <div class="analytics-page-list">
+            <article v-for="item in pageAnalytics" :key="item.page" class="analytics-row">
+              <div class="analytics-row-title"><strong>Page {{ item.page }}</strong><small>{{ item.stage }} · {{ item.sessions }} session · {{ item.totalVisits }} visit</small></div>
+              <div class="analytics-bar"><i :style="{ width: `${Math.max(4, (item.averageSec / maxPageAverage) * 100)}%` }"></i></div>
+              <b>{{ durationText(item.averageSec) }}</b>
+            </article>
+          </div>
+        </section>
+
+        <section class="analytics-section" v-if="stageAnalytics.length">
+          <div class="analytics-head"><div><small>🧭 Lesson-stage analytics</small><h4>Distribusi waktu mengajar</h4></div></div>
+          <div class="analytics-stage-grid">
+            <article v-for="item in stageAnalytics" :key="item.stage">
+              <div><strong>{{ item.stage }}</strong><span>{{ durationText(item.totalSec) }}</span></div>
+              <div class="analytics-bar"><i :style="{ width: `${Math.max(5, (item.totalSec / maxStageTotal) * 100)}%` }"></i></div>
+              <small>avg {{ durationText(item.averageSec) }} · {{ item.sessions }} session</small>
+            </article>
+          </div>
+        </section>
+
         <div class="report-session-picker">
           <label>Sesi
             <select v-model.number="selectedIndex">
@@ -105,6 +133,20 @@ watch(() => props.pdfName, load, { immediate: true })
 
           <div class="report-page-coverage" v-if="selectedReport.pagesVisited.length">
             <span v-for="page in selectedReport.pagesVisited" :key="page">{{ page }}</span>
+          </div>
+
+          <div v-if="selectedReport.pageTimings?.length" class="session-timing-table">
+            <h4>Time per page</h4>
+            <div v-for="item in selectedReport.pageTimings" :key="item.page" class="session-timing-row">
+              <strong>Page {{ item.page }}</strong><span>{{ item.stage }}</span><b>{{ durationText(item.seconds) }}</b><small>{{ item.visits }} visit{{ item.visits === 1 ? '' : 's' }}</small>
+            </div>
+          </div>
+
+          <div v-if="selectedReport.stageTimings?.length" class="session-timing-table">
+            <h4>Time per stage</h4>
+            <div v-for="item in selectedReport.stageTimings" :key="item.stage" class="session-timing-row stage-row">
+              <strong>{{ item.stage }}</strong><b>{{ durationText(item.seconds) }}</b>
+            </div>
           </div>
 
           <div class="report-assessment-list">

@@ -1,0 +1,4 @@
+.coding-companion-panel{margin:10px 0;padding:12px;border:1px solid rgba(125,95,255,.2);border-radius:14px;background:rgba(125,95,255,.06)}
+.coding-companion-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.coding-companion-head div{display:flex;flex-direction:column;gap:3px}.coding-companion-head span{font-size:11px;padding:4px 7px;border-radius:999px;background:rgba(125,95,255,.12)}
+.coding-companion-controls{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:10px 0}.coding-companion-controls input{grid-column:1/-1}.coding-companion-controls button{grid-column:1/-1}.coding-companion-panel small{opacity:.72;line-height:1.35}
+.agent-live-badge{position:absolute;right:12px;bottom:52px;max-width:210px;padding:6px 9px;border-radius:10px;background:rgba(20,20,28,.78);color:white;font-size:11px;backdrop-filter:blur(8px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

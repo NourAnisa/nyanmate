@@ -1,6 +1,6 @@
 [package]
 name = "nyanmate"
-version = "0.30.0"
+version = "0.31.0"
 description = "NyanMate AI desktop companion"
 authors = ["NourAnisa"]
 edition = "2021"

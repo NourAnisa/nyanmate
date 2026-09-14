@@ -9,7 +9,7 @@ import {
   type LessonFlowConfig,
   type LessonStage,
 } from '../services/lessonFlow'
-import { loadReportHistory } from '../services/assessment'
+import { loadAssessmentConfig, loadReportHistory } from '../services/assessment'
 import {
   applyAllLessonRebalanceSuggestions,
   applyLessonRebalanceSuggestion,
@@ -23,6 +23,14 @@ import {
   type AppliedTemplateSummary,
   type TeachingTemplateId,
 } from '../services/teachingTemplates'
+import {
+  applyCustomTeachingTemplate,
+  deleteCustomTeachingTemplate,
+  loadCustomTeachingTemplates,
+  saveFlowAsCustomTemplate,
+  type CustomTeachingTemplate,
+} from '../services/customTeachingTemplates'
+import { buildTeachingRunSheet } from '../services/teachingRunSheet'
 
 const props = defineProps<{ pdf: PreparedPdf | null }>()
 const emit = defineEmits<{ (e: 'change', flow: LessonFlowConfig): void }>()
@@ -31,16 +39,27 @@ const flow = ref<LessonFlowConfig | null>(null)
 const selectedPage = ref(1)
 const rebalanceOpen = ref(false)
 const templateOpen = ref(false)
+const customOpen = ref(false)
+const runSheetOpen = ref(false)
 const selectedTemplateId = ref<TeachingTemplateId>('theory')
 const classMinutes = ref(100)
 const appliedTemplateSummary = ref<AppliedTemplateSummary | null>(null)
+const customTemplates = ref<CustomTeachingTemplate[]>([])
+const customTemplateName = ref('')
+const customTemplateDescription = ref('')
 const stages = Object.keys(lessonStageLabels) as LessonStage[]
 const selectedPlan = computed(() => flow.value?.pages.find(item => item.page === selectedPage.value) ?? null)
 const reports = computed(() => props.pdf ? loadReportHistory(props.pdf.name) : [])
+const assessmentConfig = computed(() => props.pdf ? loadAssessmentConfig(props.pdf.name) : null)
+const runSheet = computed(() => buildTeachingRunSheet(flow.value, assessmentConfig.value))
 const rebalanceSuggestions = computed(() => buildLessonRebalanceSuggestions(flow.value, reports.value))
 const selectedSuggestion = computed(() => rebalanceSuggestions.value.find(item => item.page === selectedPage.value) ?? null)
 const selectedTemplate = computed(() => getTeachingTemplate(selectedTemplateId.value))
 const durationText = (seconds: number) => seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+
+function refreshCustomTemplates() {
+  customTemplates.value = loadCustomTeachingTemplates()
+}
 
 function load() {
   if (!props.pdf) {
@@ -50,6 +69,7 @@ function load() {
   flow.value = loadLessonFlow(props.pdf.name) ?? createDefaultLessonFlow(props.pdf.name, props.pdf.cues, props.pdf.pageCount)
   selectedPage.value = Math.min(selectedPage.value, props.pdf.pageCount)
   appliedTemplateSummary.value = null
+  refreshCustomTemplates()
   emit('change', flow.value)
 }
 
@@ -78,6 +98,26 @@ function applyTemplate() {
   flow.value = result.flow
   appliedTemplateSummary.value = result.summary
   persist()
+}
+
+function saveCurrentAsTemplate() {
+  if (!flow.value || !customTemplateName.value.trim()) return
+  saveFlowAsCustomTemplate(flow.value, customTemplateName.value, customTemplateDescription.value)
+  customTemplateName.value = ''
+  customTemplateDescription.value = ''
+  refreshCustomTemplates()
+}
+
+function applySavedTemplate(template: CustomTeachingTemplate) {
+  if (!flow.value) return
+  flow.value = applyCustomTeachingTemplate(flow.value, template)
+  appliedTemplateSummary.value = null
+  persist()
+}
+
+function removeSavedTemplate(id: string) {
+  deleteCustomTeachingTemplate(id)
+  refreshCustomTemplates()
 }
 
 function acceptSuggestion(suggestion: LessonRebalanceSuggestion) {
@@ -133,6 +173,51 @@ watch(() => props.pdf?.name, load, { immediate: true })
       </div>
     </div>
 
+    <div class="custom-template-panel">
+      <div class="teaching-template-head">
+        <div><strong>💾 Custom Templates</strong><small>Simpan flow yang sudah diedit lalu gunakan kembali pada PDF lain.</small></div>
+        <button @click="customOpen = !customOpen">{{ customOpen ? 'Hide' : `Saved ${customTemplates.length}` }}</button>
+      </div>
+      <div v-if="customOpen" class="custom-template-body">
+        <div class="custom-save-form">
+          <input v-model="customTemplateName" placeholder="Nama template, mis. IMK 100 menit" />
+          <input v-model="customTemplateDescription" placeholder="Deskripsi singkat (opsional)" />
+          <button :disabled="!customTemplateName.trim()" @click="saveCurrentAsTemplate">Save current flow</button>
+        </div>
+        <p v-if="!customTemplates.length" class="rebalance-empty">Belum ada custom template tersimpan.</p>
+        <article v-for="item in customTemplates" :key="item.id" class="custom-template-card">
+          <div><strong>{{ item.name }}</strong><small>{{ item.sourcePages }} source pages · {{ new Date(item.createdAt).toLocaleDateString() }}</small><p v-if="item.description">{{ item.description }}</p></div>
+          <button @click="applySavedTemplate(item)">Apply</button>
+          <button class="custom-delete" @click="removeSavedTemplate(item.id)">Delete</button>
+        </article>
+        <small>Jika jumlah halaman PDF baru berbeda, pola stage dan durasi dipetakan secara proporsional ke seluruh dokumen.</small>
+      </div>
+    </div>
+
+    <div class="run-sheet-panel" v-if="runSheet">
+      <div class="teaching-template-head">
+        <div><strong>📋 Pre-Class Run Sheet</strong><small>Ringkasan cepat sebelum memulai kelas.</small></div>
+        <button @click="runSheetOpen = !runSheetOpen">{{ runSheetOpen ? 'Hide' : durationText(runSheet.totalSec) }}</button>
+      </div>
+      <div v-if="runSheetOpen" class="run-sheet-body">
+        <div class="run-sheet-summary">
+          <article><small>Total plan</small><strong>{{ durationText(runSheet.totalSec) }}</strong></article>
+          <article><small>Pages</small><strong>{{ runSheet.totalPages }}</strong></article>
+          <article><small>Assessments</small><strong>{{ runSheet.assessmentPages.length }}</strong></article>
+          <article><small>Discussions</small><strong>{{ runSheet.discussionPages.length }}</strong></article>
+        </div>
+        <div class="run-sheet-stages">
+          <span v-for="item in runSheet.stageSummary" :key="item.stage"><b>{{ lessonStageLabels[item.stage] }}</b> {{ durationText(item.seconds) }} · {{ item.pages }} page</span>
+        </div>
+        <div class="run-sheet-checkpoints">
+          <p><strong>Assessment pages:</strong> {{ runSheet.assessmentPages.join(', ') || '—' }}</p>
+          <p><strong>Discussion pages:</strong> {{ runSheet.discussionPages.join(', ') || '—' }}</p>
+          <p><strong>Important checkpoints:</strong> {{ runSheet.checkpointPages.join(', ') || '—' }}</p>
+          <p><strong>Long-duration pages:</strong> {{ runSheet.longPages.join(', ') || '—' }}</p>
+        </div>
+      </div>
+    </div>
+
     <div v-if="reports.length" class="lesson-rebalancer">
       <div class="lesson-rebalancer-head">
         <div><strong>✨ Smart Lesson Rebalancer</strong><small>{{ reports.length }} sesi historis · rekomendasi lokal, bukan perubahan otomatis.</small></div>
@@ -153,12 +238,7 @@ watch(() => props.pdf?.name, load, { immediate: true })
     </div>
 
     <div class="lesson-page-strip">
-      <button
-        v-for="plan in flow.pages"
-        :key="plan.page"
-        :class="[`stage-${plan.stage}`, { active: selectedPage === plan.page, suggested: rebalanceSuggestions.some(item => item.page === plan.page) }]"
-        @click="selectedPage = plan.page"
-      >
+      <button v-for="plan in flow.pages" :key="plan.page" :class="[`stage-${plan.stage}`, { active: selectedPage === plan.page, suggested: rebalanceSuggestions.some(item => item.page === plan.page) }]" @click="selectedPage = plan.page">
         <b>{{ plan.page }}</b><span>{{ lessonStageLabels[plan.stage] }}</span>
       </button>
     </div>
